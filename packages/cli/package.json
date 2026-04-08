@@ -1,6 +1,6 @@
 {
   "name": "@the-brain/cli",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "CLI for The Brain — local-first cognitive memory. Save, recall, ingest PDFs, interactive chat.",
   "license": "AGPL-3.0",
   "publishConfig": {

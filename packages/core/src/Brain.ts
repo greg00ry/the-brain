@@ -13,6 +13,7 @@ import { USER_PROFILE_PROMPT, buildSystemPrompt } from "./services/ai/prompts/us
 import { LLM, CHAT, MEMORY, BRAIN } from "./config/constants.js";
 
 export interface BrainConfig {
+  systemPrompt?: string;
   llm?: {
     responseTemperature?: number;
     responseMaxTokens?: number;
@@ -89,9 +90,11 @@ export class Brain {
         profileUpdateEveryN: config?.chat?.profileUpdateEveryN ?? CHAT.PROFILE_UPDATE_EVERY_N,
       },
     };
+    const basePersonality = config?.systemPrompt ?? PERSONALITY_SYSTEM_PROMPT;
+
     this.handlers.set("RESEARCH_BRAIN", async (userId, text, { synapticTree, hasContext }, _llm, chatHistory) => {
       const userProfile = await this.storage.getUserProfile(userId);
-      const systemPrompt = buildSystemPrompt(PERSONALITY_SYSTEM_PROMPT, userProfile);
+      const systemPrompt = buildSystemPrompt(basePersonality, userProfile);
 
       const prompt = hasContext
         ? RESEARCH_ANSWER_PROMPT(text, synapticTree, chatHistory)
@@ -108,7 +111,7 @@ export class Brain {
 
     this.handlers.set("SAVE_ONLY", async (userId, text, _context, _llm, chatHistory) => {
       const userProfile = await this.storage.getUserProfile(userId);
-      const systemPrompt = buildSystemPrompt(PERSONALITY_SYSTEM_PROMPT, userProfile);
+      const systemPrompt = buildSystemPrompt(basePersonality, userProfile);
 
       const answer = await this.llm.complete({
         systemPrompt,
