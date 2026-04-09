@@ -14,6 +14,10 @@ import { LLM, CHAT, MEMORY, BRAIN } from "./config/constants.js";
 
 export interface BrainConfig {
   systemPrompt?: string;
+  builtInActions?: {
+    SAVE_ONLY?: string;
+    RESEARCH_BRAIN?: string;
+  };
   llm?: {
     responseTemperature?: number;
     responseMaxTokens?: number;
@@ -59,6 +63,7 @@ export class Brain {
   private handlers = new Map<string, ActionHandler>();
   private saveCount = 0;
   private conversationCount = 0;
+  private readonly _config?: BrainConfig;
   private readonly cfg: Required<{
     llm: Required<NonNullable<BrainConfig["llm"]>>;
     memory: Required<NonNullable<BrainConfig["memory"]>>;
@@ -90,6 +95,7 @@ export class Brain {
         profileUpdateEveryN: config?.chat?.profileUpdateEveryN ?? CHAT.PROFILE_UPDATE_EVERY_N,
       },
     };
+    this._config = config;
     const basePersonality = config?.systemPrompt ?? PERSONALITY_SYSTEM_PROMPT;
 
     this.handlers.set("RESEARCH_BRAIN", async (userId, text, { synapticTree, hasContext }, _llm, chatHistory) => {
@@ -128,7 +134,8 @@ export class Brain {
   async loadActions(): Promise<void> {
     // Seed built-in actions if not present
     for (const action of BUILT_IN_ACTIONS) {
-      await this.storage.upsertAction(action.name, action.description, true);
+      const description = this._config?.builtInActions?.[action.name as keyof NonNullable<BrainConfig["builtInActions"]>] ?? action.description;
+      await this.storage.upsertAction(action.name, description, true);
     }
     this.actionsCache = await this.storage.getActions();
   }

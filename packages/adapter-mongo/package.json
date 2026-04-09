@@ -1,6 +1,6 @@
 {
   "name": "@the-brain/adapter-mongo",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "MongoDB storage adapter for @the-brain/core",
   "license": "AGPL-3.0",
   "publishConfig": {
