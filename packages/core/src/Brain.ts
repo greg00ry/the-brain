@@ -139,6 +139,12 @@ export class Brain {
     this.handlers.set(name, handler);
   }
 
+  async removeAction(name: string): Promise<void> {
+    await this.storage.removeAction(name);
+    this.actionsCache = await this.storage.getActions();
+    this.handlers.delete(name);
+  }
+
   // ─── Process ──────────────────────────────────────────────────────────────
 
   async process(userId: string, text: string): Promise<ProcessResult> {

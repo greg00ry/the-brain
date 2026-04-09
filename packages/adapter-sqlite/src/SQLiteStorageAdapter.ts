@@ -235,6 +235,10 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
     `).run(name, description, isBuiltIn ? 1 : 0);
   }
 
+  async removeAction(name: string): Promise<void> {
+    this.db.prepare(`DELETE FROM actions WHERE name = ? AND isBuiltIn = 0`).run(name);
+  }
+
   // ─── Chat History ─────────────────────────────────────────────────────────
 
   async getChatHistory(userId: string): Promise<{ role: "user" | "assistant"; content: string }[]> {

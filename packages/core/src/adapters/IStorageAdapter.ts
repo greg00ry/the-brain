@@ -38,6 +38,7 @@ export interface IStorageAdapter {
   getUniqueUserIds(): Promise<string[]>;
   getActions(): Promise<ActionInfo[]>;
   upsertAction(name: string, description: string, isBuiltIn?: boolean): Promise<void>;
+  removeAction(name: string): Promise<void>;
 
   // ─── Chat History ─────────────────────────────────────────────────────────
   getChatHistory(userId: string): Promise<{ role: "user" | "assistant"; content: string }[]>;

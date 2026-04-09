@@ -172,6 +172,10 @@ export class MongoStorageAdapter implements IStorageAdapter {
     );
   }
 
+  async removeAction(name: string): Promise<void> {
+    await Action.deleteOne({ name, isBuiltIn: false });
+  }
+
   // ─── Intent Context ───────────────────────────────────────────────────────
 
   async findRelevantEntries(userId: string, keywords: string[]): Promise<IVaultEntry[]> {
