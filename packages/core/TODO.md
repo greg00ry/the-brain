@@ -19,3 +19,11 @@ Pomysł na poprawę klasyfikacji intencji:
 - embeddingi do porównania wiadomości użytkownika z punktami
 - nie rozwiązuje hardcoded rozwiązań ale poprawia routing
 - do przemyślenia jak połączyć z obecnym rule engine
+
+## Kategorie — zastąpić tagami
+- Obecna lista hardcoded (`Work`, `Personal`, `Health`...) nie skaluje się dla custom agentów
+- Model przypisuje kategorię przy ingeście, LTM grupowane po kategorii w conscious.processor
+- Pomysł: zastąpić kategorię wolnymi tagami generowanymi przez model (np. `["prawo autorskie", "licencje", "dozwolony użytek"]`)
+- Wymaga zmiany: `analyze.service.ts`, `analyze.prompt.ts`, `conscious.processor.ts`, `types/brain.ts`
+
+## ReAct agentic
