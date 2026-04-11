@@ -10,8 +10,9 @@ export const RESEARCH_ANSWER_PROMPT = (
       '\n';
   }
 
-  return `Answer the user's question based on their personal memory vault below.
-If the context is relevant, use it. If not, say you don't have that info yet and ask if they want to tell you about it.
+  return `Answer the user's question using ONLY the information from the memory context below.
+Do NOT use any outside knowledge. If the context does not contain the answer, say exactly: "Nie mam tej informacji w pamięci."
+Do NOT invent article numbers, laws, or facts that are not explicitly present in the context.
 ${history}
 MEMORY CONTEXT:
 ${context}

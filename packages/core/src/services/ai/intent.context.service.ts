@@ -125,6 +125,10 @@ export async function getBrainContext(
 
   try {
     const keywords = extractKeywords(userText);
+    if (!embeddingAdapter) {
+      console.warn('[Brain] ⚠️  No embedding adapter provided — using keyword search only. Semantic retrieval disabled.');
+    }
+
     let entries: IVaultEntry[];
 
     if (embeddingAdapter) {
@@ -164,7 +168,9 @@ export async function getBrainContext(
 
     for (const entry of entries) {
       const entryId = entry._id.toString();
-      const summary = entry.analysis?.summary || entry.rawText.substring(0, MEMORY.RAW_TEXT_PREVIEW_LENGTH);
+      const summary = entry.isPermanent
+        ? entry.rawText.substring(0, MEMORY.RAW_TEXT_PREVIEW_LENGTH)
+        : entry.analysis?.summary || entry.rawText.substring(0, MEMORY.RAW_TEXT_PREVIEW_LENGTH);
 
       synapticTreeFormatted += `📍 START: "${summary}"\n`;
 
