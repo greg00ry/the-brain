@@ -5,7 +5,6 @@
 
 export interface TopicAnalysis {
   topic: string;
-  category: string;
   entryIds: string[];
   tags: string[];
   importance: number; // 1-10
@@ -26,7 +25,6 @@ export interface IVaultEntry {
     summary: string;
     tags: string[];
     strength: number;
-    category: string;
     isProcessed: boolean;
   };
   embedding?: number[];
@@ -44,23 +42,9 @@ export interface ILongTermMemory {
   summary: string | null;
   tags: string[];
   strength: number;
-  categoryId: { toString(): string } | null;
-  categoryName: string | null;
   sourceEntryIds: { toString(): string }[];
   topic: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface ICategory {
-  _id: { toString(): string };
-  name: string;
-  description: string;
-  icon: string;
-  color: string;
-  keywords: string[];
-  isActive: boolean;
-  order: number;
-  createdAt: Date;
-  updatedAt: Date;
-}

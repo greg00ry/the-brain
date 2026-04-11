@@ -4,11 +4,9 @@ import { mkdirSync } from "node:fs";
 import type {
   IStorageAdapter,
   ActionInfo,
-  CategoryInfo,
   EntryAnalysisData,
   IVaultEntry,
   ILongTermMemory,
-  ICategory,
   TopicAnalysis,
   LongTermMemoryData,
 } from "@the-brain/core";
@@ -45,7 +43,6 @@ function toVaultEntry(row: Record<string, unknown>): IVaultEntry {
       summary: String(row.summary),
       tags: JSON.parse(String(row.tags ?? "[]")),
       strength: Number(row.strength ?? 5),
-      category: String(row.category ?? "Uncategorized"),
       isProcessed: Boolean(row.isProcessed),
     } : undefined,
     embedding: row.embedding ? JSON.parse(String(row.embedding)) : undefined,
@@ -77,7 +74,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         summary       TEXT,
         tags          TEXT DEFAULT '[]',
         strength      REAL DEFAULT 5,
-        category      TEXT DEFAULT 'Uncategorized',
         isProcessed   INTEGER DEFAULT 0,
         isAnalyzed    INTEGER DEFAULT 0,
         isConsolidated INTEGER DEFAULT 0,
@@ -102,7 +98,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         id           TEXT PRIMARY KEY,
         userId       TEXT NOT NULL,
         topic        TEXT,
-        category     TEXT,
         summary      TEXT,
         tags         TEXT DEFAULT '[]',
         strength     REAL DEFAULT 5,
@@ -124,12 +119,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         updatedAt TEXT NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS categories (
-        name        TEXT PRIMARY KEY,
-        description TEXT DEFAULT '',
-        keywords    TEXT DEFAULT '[]'
-      );
-
       CREATE TABLE IF NOT EXISTS user_profiles (
         userId    TEXT PRIMARY KEY,
         profile   TEXT NOT NULL,
@@ -144,14 +133,13 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
     const id = uid();
     const now = new Date().toISOString();
     this.db.prepare(`
-      INSERT INTO vault_entries (id, userId, rawText, summary, tags, strength, category, isProcessed, isAnalyzed, isPermanent, lastActivityAt, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      INSERT INTO vault_entries (id, userId, rawText, summary, tags, strength, isProcessed, isAnalyzed, isPermanent, lastActivityAt, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
     `).run(
       id, userId, rawText,
       analysis.summary,
       JSON.stringify(analysis.tags),
       analysis.strength,
-      analysis.category,
       analysis.isProcessed ? 1 : 0,
       analysis.isPermanent ? 1 : 0,
       now, now, now,
@@ -166,7 +154,7 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
 
   // ─── Vault ────────────────────────────────────────────────────────────────
 
-  async getVaultData(userId: string): Promise<{ entries: IVaultEntry[]; memories: ILongTermMemory[]; categories: ICategory[] }> {
+  async getVaultData(userId: string): Promise<{ entries: IVaultEntry[]; memories: ILongTermMemory[] }> {
     const entries = (this.db.prepare("SELECT * FROM vault_entries WHERE userId = ? ORDER BY createdAt DESC").all(userId) as Record<string, unknown>[]).map(toVaultEntry);
 
     const memories = (this.db.prepare("SELECT * FROM long_term_memories WHERE userId = ?").all(userId) as Record<string, unknown>[]).map(row => ({
@@ -175,28 +163,13 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
       summary: row.summary ? String(row.summary) : null,
       tags: JSON.parse(String(row.tags ?? "[]")),
       strength: Number(row.strength ?? 5),
-      categoryId: null,
-      categoryName: row.category ? String(row.category) : null,
       sourceEntryIds: JSON.parse(String(row.sourceEntryIds ?? "[]")).map((id: string) => ({ toString: () => id })),
       topic: row.topic ? String(row.topic) : null,
       createdAt: new Date(String(row.createdAt)),
       updatedAt: new Date(String(row.updatedAt)),
     } as ILongTermMemory));
 
-    const categories = (this.db.prepare("SELECT * FROM categories").all() as Record<string, unknown>[]).map(row => ({
-      _id: { toString: () => String(row.name) },
-      name: String(row.name),
-      description: String(row.description ?? ""),
-      icon: "",
-      color: "",
-      keywords: JSON.parse(String(row.keywords ?? "[]")),
-      isActive: true,
-      order: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } as ICategory));
-
-    return { entries, memories, categories };
+    return { entries, memories };
   }
 
   async deleteVaultEntry(entryId: string, userId: string): Promise<IVaultEntry | null> {
@@ -209,13 +182,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
 
   // ─── Shared ───────────────────────────────────────────────────────────────
 
-  async getCategories(): Promise<CategoryInfo[]> {
-    return (this.db.prepare("SELECT * FROM categories").all() as Record<string, unknown>[]).map(row => ({
-      name: String(row.name),
-      description: String(row.description ?? ""),
-      keywords: JSON.parse(String(row.keywords ?? "[]")),
-    }));
-  }
 
   async getUniqueUserIds(): Promise<string[]> {
     return (this.db.prepare("SELECT DISTINCT userId FROM vault_entries").all() as { userId: string }[]).map(r => r.userId);
@@ -350,15 +316,15 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
     return rows.map(toVaultEntry);
   }
 
-  async upsertLTM(userId: string, topic: string, category: string, memoryData: LongTermMemoryData, entries: IVaultEntry[]): Promise<void> {
+  async upsertLTM(userId: string, topic: string, memoryData: LongTermMemoryData, entries: IVaultEntry[]): Promise<void> {
     const id = uid();
     const now = new Date().toISOString();
     const entryIds = JSON.stringify(entries.map(e => e._id.toString()));
     this.db.prepare(`
-      INSERT INTO long_term_memories (id, userId, topic, category, summary, tags, sourceEntryIds, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO long_term_memories (id, userId, topic, summary, tags, sourceEntryIds, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT DO NOTHING
-    `).run(id, userId, topic, category, memoryData.summary, JSON.stringify(memoryData.tags), entryIds, now, now);
+    `).run(id, userId, topic, memoryData.summary, JSON.stringify(memoryData.tags), entryIds, now, now);
   }
 
   async markConsolidated(entries: IVaultEntry[]): Promise<void> {

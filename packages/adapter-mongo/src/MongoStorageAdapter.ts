@@ -1,14 +1,12 @@
 import mongoose from "mongoose";
 import {
   IStorageAdapter,
-  CategoryInfo,
   EntryAnalysisData,
   ActionInfo,
 } from "@the-brain/core";
 import type {
   IVaultEntry,
   ILongTermMemory,
-  ICategory,
   TopicAnalysis,
   LongTermMemoryData,
 } from "@the-brain/core";
@@ -95,17 +93,14 @@ export class MongoStorageAdapter implements IStorageAdapter {
   async getVaultData(userId: string): Promise<{
     entries: IVaultEntry[];
     memories: ILongTermMemory[];
-    categories: ICategory[];
   }> {
-    const [entries, memories, categories] = await Promise.all([
+    const [entries, memories] = await Promise.all([
       VaultEntry.find({ userId }).sort({ createdAt: -1 }),
-      LongTermMemory.find({ userId }).populate('categoryId').sort({ createdAt: -1 }),
-      Category.find({ isActive: true }).sort({ order: 1 }),
+      LongTermMemory.find({ userId }).sort({ createdAt: -1 }),
     ]);
     return {
       entries: entries as unknown as IVaultEntry[],
       memories: memories as unknown as ILongTermMemory[],
-      categories: categories as unknown as ICategory[],
     };
   }
 
@@ -114,15 +109,6 @@ export class MongoStorageAdapter implements IStorageAdapter {
   }
 
   // ─── Shared ───────────────────────────────────────────────────────────────
-
-  async getCategories(): Promise<CategoryInfo[]> {
-    const categories = await Category.find({ isActive: true }).sort({ order: 1 });
-    return categories.map(cat => ({
-      name: cat.name,
-      description: cat.description,
-      keywords: cat.keywords,
-    }));
-  }
 
   async getUniqueUserIds(): Promise<string[]> {
     const ids = await VaultEntry.distinct('userId');
@@ -314,7 +300,7 @@ export class MongoStorageAdapter implements IStorageAdapter {
       updateOne: {
         filter: { _id: new mongoose.Types.ObjectId(id) },
         update: {
-          $set: { 'analysis.category': topic.category, isAnalyzed: true },
+          $set: { isAnalyzed: true },
           $addToSet: { 'analysis.tags': { $each: topic.tags } },
           $inc: { 'analysis.strength': topic.importance || 1 },
         },
@@ -336,11 +322,9 @@ export class MongoStorageAdapter implements IStorageAdapter {
   async upsertLTM(
     userId: string,
     topic: string,
-    category: string,
     memoryData: LongTermMemoryData,
     entries: IVaultEntry[]
   ): Promise<void> {
-    const categoryDoc = await Category.findOne({ name: category, isActive: true });
     const existing = await LongTermMemory.findOne({ userId, topic });
     if (existing) {
       existing.summary = memoryData.summary;
@@ -352,8 +336,6 @@ export class MongoStorageAdapter implements IStorageAdapter {
         userId,
         summary: memoryData.summary,
         tags: memoryData.tags,
-        categoryId: categoryDoc?._id || null,
-        categoryName: category,
         topic,
         sourceEntryIds: entries.map(e => new mongoose.Types.ObjectId(e._id.toString())),
         strength: BRAIN.LTM_INITIAL_STRENGTH,

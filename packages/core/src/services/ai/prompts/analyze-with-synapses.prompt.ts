@@ -1,15 +1,9 @@
 
-
-
 export const ANALYZE_WITH_SYNAPSES_PROMPT = (
-    categoryList: string,
     deltaSummaries: string,
     contextSummaries: string
 ) => {
     return `Analyze new entries (isNew=true) and find connections to existing ones.
-
-CATEGORIES:
-${categoryList}
 
 NEW ENTRIES (analyze these):
 ${deltaSummaries}
@@ -19,7 +13,7 @@ ${contextSummaries}
 
 Return JSON with TWO arrays:
 {
-  "topics": [{"topic":"name","category":"category","entryIds":["id1"],"tags":["tag"],"importance":1-10}],
+  "topics": [{"topic":"name","entryIds":["id1"],"tags":["tag"],"importance":1-10}],
   "synapses": [{"sourceId":"newEntryId","targetId":"anyEntryId","reason":"semantic reason why connected","strength":1-10}]
 }
 

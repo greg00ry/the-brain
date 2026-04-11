@@ -1,7 +1,7 @@
 import { IVaultEntry } from "../../types/brain.js";
 import { ILLMAdapter } from "../../adapters/ILLMAdapter.js";
 import { cleanAndParseJSON } from "../../utils/json.js";
-import { IStorageAdapter, CategoryInfo } from "../../adapters/IStorageAdapter.js";
+import { IStorageAdapter } from "../../adapters/IStorageAdapter.js";
 import { TopicAnalysis, LongTermMemoryData } from "../../types/brain.js";
 import { LONG_TERM_MEMORY_SUMMARY_PROMPT } from "../ai/prompts/ltm-summary.prompt.js";
 import { ANALYZE_WITH_SYNAPSES_PROMPT } from "../ai/prompts/analyze-with-synapses.prompt.js";
@@ -36,7 +36,6 @@ export interface ConsciousStats {
 async function analyzeWithSynapses(
   deltaEntries: IVaultEntry[],
   contextEntries: IVaultEntry[],
-  categories: CategoryInfo[],
   llm: ILLMAdapter
 ): Promise<AnalysisResult> {
   if (deltaEntries.length === 0) return { topics: [], synapses: [] };
@@ -52,17 +51,10 @@ async function analyzeWithSynapses(
     id: e._id.toString(),
     text: e.analysis?.summary || e.rawText.substring(0, 100),
     tags: e.analysis?.tags?.slice(0, 3) || [],
-    category: e.analysis?.category,
     isNew: false,
   }));
 
-  const categoryList = categories
-    .slice(0, 10)
-    .map(c => `${c.name}: ${c.description}`)
-    .join('\n');
-
   const prompt = ANALYZE_WITH_SYNAPSES_PROMPT(
-    categoryList,
     JSON.stringify(deltaSummaries, null, 1),
     JSON.stringify(contextSummaries, null, 1)
   );
@@ -96,7 +88,6 @@ async function analyzeWithSynapses(
 async function createLongTermMemorySummary(
   entries: IVaultEntry[],
   topic: string,
-  categoryName: string,
   llm: ILLMAdapter
 ): Promise<LongTermMemoryData | null> {
   const entriesContent = entries.slice(0, BRAIN.LTM_MAX_SOURCE_ENTRIES).map(e => ({
@@ -104,7 +95,7 @@ async function createLongTermMemorySummary(
     tags: e.analysis?.tags?.slice(0, 3) || [],
   }));
 
-  const prompt = LONG_TERM_MEMORY_SUMMARY_PROMPT(topic, categoryName, JSON.stringify(entriesContent));
+  const prompt = LONG_TERM_MEMORY_SUMMARY_PROMPT(topic, JSON.stringify(entriesContent));
 
   try {
     const content = await llm.complete({
@@ -142,12 +133,6 @@ export async function runConsciousProcessor(llm: ILLMAdapter, storage: IStorageA
   };
 
   try {
-    const categories = await storage.getCategories();
-    if (categories.length === 0) {
-      console.log('👁️ [Świadomość] ⚠️ Brak kategorii. Uruchom: npm run seed:categories');
-      return stats;
-    }
-
     const userIds = await storage.getUniqueUserIds();
     console.log(`👁️ [Świadomość] Przetwarzam ${userIds.length} użytkowników`);
 
@@ -172,7 +157,7 @@ export async function runConsciousProcessor(llm: ILLMAdapter, storage: IStorageA
           const deltaIds = currentBatch.map(e => e._id.toString());
           const contextEntries = await storage.findContextEntries(userId, deltaIds);
 
-          const { topics, synapses } = await analyzeWithSynapses(currentBatch, contextEntries, categories, llm);
+          const { topics, synapses } = await analyzeWithSynapses(currentBatch, contextEntries, llm);
           console.log(`👁️ [Batch] Zidentyfikowano ${topics.length} tematów, ${synapses.length} połączeń`);
 
           for (const topic of topics) {
@@ -197,34 +182,26 @@ export async function runConsciousProcessor(llm: ILLMAdapter, storage: IStorageA
       if (strongEntries.length > 0) {
         console.log(`👁️ [Świadomość]    Konsolidacja: ${strongEntries.length} silnych wspomnień`);
 
-        const entriesByCategory = new Map<string, IVaultEntry[]>();
-        for (const entry of strongEntries) {
-          const cat = entry.analysis?.category || 'Uncategorized';
-          if (!entriesByCategory.has(cat)) entriesByCategory.set(cat, []);
-          entriesByCategory.get(cat)!.push(entry);
-        }
+        // Group by top shared tags instead of category
+        const allTags = strongEntries.flatMap(e => e.analysis?.tags || []);
+        const tagCounts = new Map<string, number>();
+        allTags.forEach(tag => tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1));
+        const topTags = [...tagCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([tag]) => tag);
 
-        for (const [category, entries] of entriesByCategory) {
-          const allTags = entries.flatMap(e => e.analysis?.tags || []);
-          const tagCounts = new Map<string, number>();
-          allTags.forEach(tag => tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1));
-          const topTags = [...tagCounts.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 3)
-            .map(([tag]) => tag);
+        const topic = topTags.join(' + ') || 'general';
+        console.log(`👁️ [Świadomość]    🧠 Tworzę LTM: "${topic}"`);
 
-          const topic = topTags.join(' + ') || category;
-          console.log(`👁️ [Świadomość]    🧠 Tworzę LTM: "${topic}" [${category}]`);
+        const memoryData = await createLongTermMemorySummary(strongEntries, topic, llm);
 
-          const memoryData = await createLongTermMemorySummary(entries, topic, category, llm);
+        if (memoryData) {
+          await storage.upsertLTM(userId, topic, memoryData, strongEntries);
+          console.log(`👁️ [Świadomość]    ✅ LTM zapisane`);
 
-          if (memoryData) {
-            await storage.upsertLTM(userId, topic, category, memoryData, entries);
-            console.log(`👁️ [Świadomość]    ✅ LTM zapisane`);
-
-            await storage.markConsolidated(entries);
-            stats.consolidated += entries.length;
-          }
+          await storage.markConsolidated(strongEntries);
+          stats.consolidated += strongEntries.length;
         }
       }
     }

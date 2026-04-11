@@ -7,7 +7,6 @@ export interface AIAnalysis {
   summary: string;
   tags: string[];
   strength: number;
-  category: string;
   isProcessed: boolean;
 }
 
@@ -20,7 +19,6 @@ const FALLBACK_ANALYSIS = (text: string): AIAnalysis => ({
   summary: truncate(text),
   tags: ['unprocessed'],
   strength: 5,
-  category: 'Uncategorized',
   isProcessed: false,
 });
 
@@ -48,7 +46,6 @@ export const analyzeTextWithAI = async (text: string, llm: ILLMAdapter): Promise
       summary: parsed.summary || truncate(text),
       tags: Array.isArray(parsed.tags) ? parsed.tags : [],
       strength: Number(parsed.strength) || 0,
-      category: parsed.category || 'Other',
       isProcessed: true,
     };
   } catch (err) {

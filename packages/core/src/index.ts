@@ -8,7 +8,6 @@ export type { IEmbeddingAdapter } from "./adapters/IEmbeddingAdapter.js";
 export type {
   IStorageAdapter,
   ActionInfo,
-  CategoryInfo,
   EntryAnalysisData,
 } from "./adapters/IStorageAdapter.js";
 
@@ -22,7 +21,6 @@ export type {
   LongTermMemoryData,
   IVaultEntry,
   ILongTermMemory,
-  ICategory,
 } from "./types/brain.js";
 
 // ─── Services (public API) ────────────────────────────────────────────────────

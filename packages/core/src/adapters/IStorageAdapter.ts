@@ -1,21 +1,14 @@
-import { IVaultEntry, ILongTermMemory, ICategory, TopicAnalysis, LongTermMemoryData } from "../types/brain.js";
+import { IVaultEntry, ILongTermMemory, TopicAnalysis, LongTermMemoryData } from "../types/brain.js";
 
 export interface ActionInfo {
   name: string;
   description: string;
 }
 
-export interface CategoryInfo {
-  name: string;
-  description: string;
-  keywords: string[];
-}
-
 export interface EntryAnalysisData {
   summary: string;
   tags: string[];
   strength: number;
-  category: string;
   isProcessed: boolean;
   isPermanent?: boolean;
 }
@@ -29,12 +22,10 @@ export interface IStorageAdapter {
   getVaultData(userId: string): Promise<{
     entries: IVaultEntry[];
     memories: ILongTermMemory[];
-    categories: ICategory[];
   }>;
   deleteVaultEntry(entryId: string, userId: string): Promise<IVaultEntry | null>;
 
   // ─── Shared ───────────────────────────────────────────────────────────────
-  getCategories(): Promise<CategoryInfo[]>;
   getUniqueUserIds(): Promise<string[]>;
   getActions(): Promise<ActionInfo[]>;
   upsertAction(name: string, description: string, isBuiltIn?: boolean): Promise<void>;
@@ -61,7 +52,6 @@ export interface IStorageAdapter {
   upsertLTM(
     userId: string,
     topic: string,
-    category: string,
     memoryData: LongTermMemoryData,
     entries: IVaultEntry[]
   ): Promise<void>;

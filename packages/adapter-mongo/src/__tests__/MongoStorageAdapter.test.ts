@@ -141,39 +141,6 @@ describe("getVaultData", () => {
     const data = await adapter.getVaultData("ghost-user");
     expect(data.entries).toHaveLength(0);
     expect(data.memories).toHaveLength(0);
-    expect(data.categories).toHaveLength(0);
-  });
-
-  it("returns active categories regardless of userId", async () => {
-    await seedCategory("Tech");
-    await seedCategory("Health", 1);
-    const data = await adapter.getVaultData("user-1");
-    expect(data.categories).toHaveLength(2);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// getCategories
-// ═══════════════════════════════════════════════════════════════════════════════
-
-describe("getCategories", () => {
-  it("returns active categories with name, description, keywords", async () => {
-    await Category.create({ name: "Tech", description: "Technology", keywords: ["code", "dev"], isActive: true });
-    const cats = await adapter.getCategories();
-    expect(cats).toHaveLength(1);
-    expect(cats[0].name).toBe("Tech");
-    expect(cats[0].keywords).toEqual(["code", "dev"]);
-  });
-
-  it("excludes inactive categories", async () => {
-    await Category.create({ name: "Hidden", description: "desc", isActive: false });
-    const cats = await adapter.getCategories();
-    expect(cats).toHaveLength(0);
-  });
-
-  it("returns empty array when no categories", async () => {
-    const cats = await adapter.getCategories();
-    expect(cats).toHaveLength(0);
   });
 });
 
@@ -551,18 +518,16 @@ describe("findContextEntries", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("applyTopicAnalysis", () => {
-  it("updates category, sets isAnalyzed=true, adds tags, increments strength", async () => {
+  it("sets isAnalyzed=true, adds tags, increments strength", async () => {
     const e = await seedEntry("user-1", "text", { strength: 3, tags: ["existing"] });
     await adapter.applyTopicAnalysis({
       topic: "ML",
-      category: "Tech",
       entryIds: [e._id.toString()],
       tags: ["ml", "ai"],
       importance: 2,
     });
     const updated = await VaultEntry.findById(e._id).lean();
     expect(updated!.isAnalyzed).toBe(true);
-    expect(updated!.analysis!.category).toBe("Tech");
     expect(updated!.analysis!.strength).toBe(5); // 3 + 2
     expect(updated!.analysis!.tags).toContain("ml");
     expect(updated!.analysis!.tags).toContain("existing");
@@ -573,7 +538,6 @@ describe("applyTopicAnalysis", () => {
     const e2 = await seedEntry();
     const count = await adapter.applyTopicAnalysis({
       topic: "t",
-      category: "c",
       entryIds: [e1._id.toString(), e2._id.toString()],
       tags: [],
       importance: 1,
@@ -583,7 +547,7 @@ describe("applyTopicAnalysis", () => {
 
   it("returns 0 when entryIds is empty", async () => {
     const count = await adapter.applyTopicAnalysis({
-      topic: "t", category: "c", entryIds: [], tags: [], importance: 1,
+      topic: "t", entryIds: [], tags: [], importance: 1,
     });
     expect(count).toBe(0);
   });
@@ -613,7 +577,7 @@ describe("findStrongEntries", () => {
 describe("upsertLTM", () => {
   it("creates a new LTM record", async () => {
     const entry = await seedEntry("user-1", "python knowledge", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", "Tech", { summary: "Python summary", tags: ["python"] }, [entry]);
+    await adapter.upsertLTM("user-1", "Python", { summary: "Python summary", tags: ["python"] }, [entry]);
     const ltm = await LongTermMemory.findOne({ userId: "user-1", topic: "Python" });
     expect(ltm).not.toBeNull();
     expect(ltm!.summary).toBe("Python summary");
@@ -622,33 +586,17 @@ describe("upsertLTM", () => {
 
   it("updates existing LTM (same topic) and merges tags", async () => {
     const e1 = await seedEntry("user-1", "entry1", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", "Tech", { summary: "v1", tags: ["tag1"] }, [e1]);
+    await adapter.upsertLTM("user-1", "Python", { summary: "v1", tags: ["tag1"] }, [e1]);
 
     const e2 = await seedEntry("user-1", "entry2", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", "Tech", { summary: "v2", tags: ["tag2"] }, [e2]);
+    await adapter.upsertLTM("user-1", "Python", { summary: "v2", tags: ["tag2"] }, [e2]);
 
     const ltm = await LongTermMemory.findOne({ userId: "user-1", topic: "Python" });
     expect(ltm!.summary).toBe("v2");
     expect(ltm!.tags).toContain("tag1");
     expect(ltm!.tags).toContain("tag2");
-    // only one LTM record
     const count = await LongTermMemory.countDocuments({ userId: "user-1", topic: "Python" });
     expect(count).toBe(1);
-  });
-
-  it("links to category when it exists", async () => {
-    const cat = await seedCategory("Tech");
-    const entry = await seedEntry("user-1", "text", { strength: 10 });
-    await adapter.upsertLTM("user-1", "topic", "Tech", { summary: "s", tags: [] }, [entry]);
-    const ltm = await LongTermMemory.findOne({ userId: "user-1" });
-    expect(ltm!.categoryId!.toString()).toBe(cat._id.toString());
-  });
-
-  it("sets categoryId=null when category not found", async () => {
-    const entry = await seedEntry("user-1", "text", { strength: 10 });
-    await adapter.upsertLTM("user-1", "topic", "NonExistent", { summary: "s", tags: [] }, [entry]);
-    const ltm = await LongTermMemory.findOne({ userId: "user-1" });
-    expect(ltm!.categoryId).toBeNull();
   });
 });
 

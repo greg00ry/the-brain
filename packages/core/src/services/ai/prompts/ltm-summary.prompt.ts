@@ -1,8 +1,6 @@
 
-
-
-export const LONG_TERM_MEMORY_SUMMARY_PROMPT = (topic: string, categoryName: string, entriesContent: string) => {
-    return `Consolidate these memories about "${topic}" (${categoryName}) into one summary.
+export const LONG_TERM_MEMORY_SUMMARY_PROMPT = (topic: string, entriesContent: string) => {
+    return `Consolidate these memories about "${topic}" into one summary.
 
 Entries:
 ${entriesContent}
