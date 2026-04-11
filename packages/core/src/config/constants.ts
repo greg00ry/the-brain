@@ -64,6 +64,7 @@ export const MEMORY = {
   SYNAPSE_TREE_DEPTH: 5,
   SYNAPSE_BRANCH_FACTOR: 5,
   CONTEXT_TOP_ENTRIES: 5,
+  CONTEXT_MAX_CHARS_PER_ENTRY: 1200,
   RAW_TEXT_PREVIEW_LENGTH: 80,
   MULTI_QUERY_MAX_TERMS: 3,   // max keywords queried independently in multi-query recall
 

@@ -29,6 +29,7 @@ export interface BrainConfig {
     synapseTreeDepth?: number;
     synapseBranchFactor?: number;
     contextTopEntries?: number;
+    contextMaxCharsPerEntry?: number;
     decayWindowMs?: number;
   };
   chat?: {
@@ -88,6 +89,7 @@ export class Brain {
         synapseTreeDepth: config?.memory?.synapseTreeDepth ?? MEMORY.SYNAPSE_TREE_DEPTH,
         synapseBranchFactor: config?.memory?.synapseBranchFactor ?? MEMORY.SYNAPSE_BRANCH_FACTOR,
         contextTopEntries: config?.memory?.contextTopEntries ?? MEMORY.CONTEXT_TOP_ENTRIES,
+        contextMaxCharsPerEntry: config?.memory?.contextMaxCharsPerEntry ?? MEMORY.CONTEXT_MAX_CHARS_PER_ENTRY,
         decayWindowMs: config?.memory?.decayWindowMs ?? BRAIN.DECAY_WINDOW_MS,
       },
       chat: {
@@ -103,8 +105,9 @@ export class Brain {
       const userProfile = await this.storage.getUserProfile(userId);
       const systemPrompt = buildSystemPrompt(basePersonality, userProfile);
 
+      const maxCharsPerEntry = this.cfg.memory.contextMaxCharsPerEntry ?? 1200;
       const fullContext = relevantEntries
-        .map((e, i) => `[${i + 1}] ${e.rawText}`)
+        .map((e, i) => `[${i + 1}] ${e.rawText.substring(0, maxCharsPerEntry)}`)
         .join('\n\n---\n\n');
 
       const prompt = hasContext
