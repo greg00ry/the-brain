@@ -47,6 +47,29 @@ Multi-agent:
 - agenci mogą wywoływać innych agentów przez akcje
 - do przemyślenia: jak przekazywać kontekst między agentami
 
+## Własny model do klasyfikacji intencji
+Mały model (1-3B) wytrenowany tylko na klasyfikacji intencji:
+- wejście: tekst użytkownika
+- wyjście: `{ "intent": "RESEARCH_BRAIN", "confidence": 0.92 }`
+- deterministyczny, szybki, prywatny — zastępuje obecny hybrid routing
+
+**Fine-tuning:**
+- baza: llama3.2 3B lub phi-3 mini
+- dane: ~1000 przykładów (intent → JSON)
+- narzędzia: `unsloth` (2x szybszy fine-tuning), `llama.cpp` (konwersja do GGUF)
+- koszt: kilka dolarów na RunPod/Colab
+
+**Deploy:**
+- Hugging Face Hub jako publiczne repo modelu
+- użytkownik: `ollama pull greg00ry/the-brain-intent`
+- framework automatycznie wykrywa i używa do klasyfikacji
+- w przyszłości: `@the-brain/intent-model` — pakiet npm z `npx download`
+
+**Dlaczego warto:**
+- rozwiązuje problem zawodnej klasyfikacji lokalnych modeli
+- użytkownik ma pełną prywatność (zero chmury)
+- model można aktualizować niezależnie od frameworku
+
 ## Native Tool Calling (OpenAI function calling format)
 Prawdziwe modele (GPT-4, Claude, Gemini) mają wbudowany tool calling:
 - model sam decyduje kiedy wywołać tool
