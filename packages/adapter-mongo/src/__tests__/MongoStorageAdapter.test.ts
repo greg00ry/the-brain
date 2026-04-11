@@ -41,9 +41,7 @@ beforeEach(async () => {
 function makeAnalysis(overrides = {}) {
   return {
     summary: "Test summary",
-    tags: ["test", "vitest"],
     strength: 5,
-    category: "Tech",
     isProcessed: true,
     ...overrides,
   };
@@ -70,9 +68,8 @@ describe("createEntry", () => {
   });
 
   it("stores analysis fields correctly", async () => {
-    const entry = await seedEntry("user-1", "text", { summary: "my summary", tags: ["a", "b"], strength: 7 });
+    const entry = await seedEntry("user-1", "text", { summary: "my summary", strength: 7 });
     expect(entry.analysis?.summary).toBe("my summary");
-    expect(entry.analysis?.tags).toEqual(["a", "b"]);
     expect(entry.analysis?.strength).toBe(7);
   });
 
@@ -518,19 +515,16 @@ describe("findContextEntries", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("applyTopicAnalysis", () => {
-  it("sets isAnalyzed=true, adds tags, increments strength", async () => {
-    const e = await seedEntry("user-1", "text", { strength: 3, tags: ["existing"] });
+  it("sets isAnalyzed=true and increments strength", async () => {
+    const e = await seedEntry("user-1", "text", { strength: 3 });
     await adapter.applyTopicAnalysis({
       topic: "ML",
       entryIds: [e._id.toString()],
-      tags: ["ml", "ai"],
       importance: 2,
     });
     const updated = await VaultEntry.findById(e._id).lean();
     expect(updated!.isAnalyzed).toBe(true);
     expect(updated!.analysis!.strength).toBe(5); // 3 + 2
-    expect(updated!.analysis!.tags).toContain("ml");
-    expect(updated!.analysis!.tags).toContain("existing");
   });
 
   it("returns number of updated entries", async () => {
@@ -539,7 +533,6 @@ describe("applyTopicAnalysis", () => {
     const count = await adapter.applyTopicAnalysis({
       topic: "t",
       entryIds: [e1._id.toString(), e2._id.toString()],
-      tags: [],
       importance: 1,
     });
     expect(count).toBe(2);
@@ -547,7 +540,7 @@ describe("applyTopicAnalysis", () => {
 
   it("returns 0 when entryIds is empty", async () => {
     const count = await adapter.applyTopicAnalysis({
-      topic: "t", entryIds: [], tags: [], importance: 1,
+      topic: "t", entryIds: [], importance: 1,
     });
     expect(count).toBe(0);
   });
@@ -577,24 +570,21 @@ describe("findStrongEntries", () => {
 describe("upsertLTM", () => {
   it("creates a new LTM record", async () => {
     const entry = await seedEntry("user-1", "python knowledge", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", { summary: "Python summary", tags: ["python"] }, [entry]);
+    await adapter.upsertLTM("user-1", "Python", { summary: "Python summary" }, [entry]);
     const ltm = await LongTermMemory.findOne({ userId: "user-1", topic: "Python" });
     expect(ltm).not.toBeNull();
     expect(ltm!.summary).toBe("Python summary");
-    expect(ltm!.tags).toContain("python");
   });
 
-  it("updates existing LTM (same topic) and merges tags", async () => {
+  it("updates existing LTM (same topic)", async () => {
     const e1 = await seedEntry("user-1", "entry1", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", { summary: "v1", tags: ["tag1"] }, [e1]);
+    await adapter.upsertLTM("user-1", "Python", { summary: "v1" }, [e1]);
 
     const e2 = await seedEntry("user-1", "entry2", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", { summary: "v2", tags: ["tag2"] }, [e2]);
+    await adapter.upsertLTM("user-1", "Python", { summary: "v2" }, [e2]);
 
     const ltm = await LongTermMemory.findOne({ userId: "user-1", topic: "Python" });
     expect(ltm!.summary).toBe("v2");
-    expect(ltm!.tags).toContain("tag1");
-    expect(ltm!.tags).toContain("tag2");
     const count = await LongTermMemory.countDocuments({ userId: "user-1", topic: "Python" });
     expect(count).toBe(1);
   });

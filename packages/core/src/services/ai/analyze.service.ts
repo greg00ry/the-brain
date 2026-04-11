@@ -5,7 +5,6 @@ import { LLM } from "../../config/constants.js";
 
 export interface AIAnalysis {
   summary: string;
-  tags: string[];
   strength: number;
   isProcessed: boolean;
 }
@@ -17,7 +16,6 @@ const truncate = (text: string): string =>
 
 const FALLBACK_ANALYSIS = (text: string): AIAnalysis => ({
   summary: truncate(text),
-  tags: ['unprocessed'],
   strength: 5,
   isProcessed: false,
 });
@@ -44,7 +42,6 @@ export const analyzeTextWithAI = async (text: string, llm: ILLMAdapter): Promise
 
     return {
       summary: parsed.summary || truncate(text),
-      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
       strength: Number(parsed.strength) || 0,
       isProcessed: true,
     };

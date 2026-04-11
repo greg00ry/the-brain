@@ -1,4 +1,3 @@
-
 export const ANALYZE_WITH_SYNAPSES_PROMPT = (
     deltaSummaries: string,
     contextSummaries: string
@@ -13,7 +12,7 @@ ${contextSummaries}
 
 Return JSON with TWO arrays:
 {
-  "topics": [{"topic":"name","entryIds":["id1"],"tags":["tag"],"importance":1-10}],
+  "topics": [{"topic":"name","entryIds":["id1"],"importance":1-10}],
   "synapses": [{"sourceId":"newEntryId","targetId":"anyEntryId","reason":"semantic reason why connected","strength":1-10}]
 }
 

@@ -7,7 +7,6 @@ export interface ActionInfo {
 
 export interface EntryAnalysisData {
   summary: string;
-  tags: string[];
   strength: number;
   isProcessed: boolean;
   isPermanent?: boolean;

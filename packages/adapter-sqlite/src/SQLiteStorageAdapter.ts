@@ -41,7 +41,6 @@ function toVaultEntry(row: Record<string, unknown>): IVaultEntry {
     rawText: String(row.rawText),
     analysis: row.summary ? {
       summary: String(row.summary),
-      tags: JSON.parse(String(row.tags ?? "[]")),
       strength: Number(row.strength ?? 5),
       isProcessed: Boolean(row.isProcessed),
     } : undefined,
@@ -72,7 +71,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         userId        TEXT NOT NULL,
         rawText       TEXT NOT NULL,
         summary       TEXT,
-        tags          TEXT DEFAULT '[]',
         strength      REAL DEFAULT 5,
         isProcessed   INTEGER DEFAULT 0,
         isAnalyzed    INTEGER DEFAULT 0,
@@ -99,7 +97,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         userId       TEXT NOT NULL,
         topic        TEXT,
         summary      TEXT,
-        tags         TEXT DEFAULT '[]',
         strength     REAL DEFAULT 5,
         sourceEntryIds TEXT DEFAULT '[]',
         createdAt    TEXT NOT NULL,
@@ -133,12 +130,11 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
     const id = uid();
     const now = new Date().toISOString();
     this.db.prepare(`
-      INSERT INTO vault_entries (id, userId, rawText, summary, tags, strength, isProcessed, isAnalyzed, isPermanent, lastActivityAt, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      INSERT INTO vault_entries (id, userId, rawText, summary, strength, isProcessed, isAnalyzed, isPermanent, lastActivityAt, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
     `).run(
       id, userId, rawText,
       analysis.summary,
-      JSON.stringify(analysis.tags),
       analysis.strength,
       analysis.isProcessed ? 1 : 0,
       analysis.isPermanent ? 1 : 0,
@@ -161,7 +157,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
       _id: { toString: () => String(row.id) },
       userId: String(row.userId),
       summary: row.summary ? String(row.summary) : null,
-      tags: JSON.parse(String(row.tags ?? "[]")),
       strength: Number(row.strength ?? 5),
       sourceEntryIds: JSON.parse(String(row.sourceEntryIds ?? "[]")).map((id: string) => ({ toString: () => id })),
       topic: row.topic ? String(row.topic) : null,
@@ -295,15 +290,12 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
 
   async applyTopicAnalysis(topic: TopicAnalysis): Promise<number> {
     const stmt = this.db.prepare(
-      "UPDATE vault_entries SET tags = ?, updatedAt = ? WHERE id = ?"
+      "UPDATE vault_entries SET isAnalyzed = 1, updatedAt = ? WHERE id = ?"
     );
     const now = new Date().toISOString();
     let updated = 0;
     for (const id of topic.entryIds) {
-      const entry = await this.getEntryById(id);
-      if (!entry) continue;
-      const merged = [...new Set([...(entry.analysis?.tags ?? []), ...topic.tags])];
-      stmt.run(JSON.stringify(merged), now, id);
+      stmt.run(now, id);
       updated++;
     }
     return updated;
@@ -321,10 +313,10 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
     const now = new Date().toISOString();
     const entryIds = JSON.stringify(entries.map(e => e._id.toString()));
     this.db.prepare(`
-      INSERT INTO long_term_memories (id, userId, topic, summary, tags, sourceEntryIds, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO long_term_memories (id, userId, topic, summary, sourceEntryIds, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT DO NOTHING
-    `).run(id, userId, topic, memoryData.summary, JSON.stringify(memoryData.tags), entryIds, now, now);
+    `).run(id, userId, topic, memoryData.summary, entryIds, now, now);
   }
 
   async markConsolidated(entries: IVaultEntry[]): Promise<void> {

@@ -169,7 +169,6 @@ export class MongoStorageAdapter implements IStorageAdapter {
     return VaultEntry.find({
       userId,
       $or: [
-        { 'analysis.tags': { $in: keywords } },
         { 'analysis.summary': { $regex: pattern, $options: 'i' } },
         { rawText: { $regex: pattern, $options: 'i' } },
       ],
@@ -214,7 +213,7 @@ export class MongoStorageAdapter implements IStorageAdapter {
     const synapses = await Synapse.find({ from: new mongoose.Types.ObjectId(entryId) })
       .sort({ weight: -1 })
       .limit(limit)
-      .populate('to', 'analysis.summary analysis.tags rawText')
+      .populate('to', 'analysis.summary rawText')
       .lean();
 
     return synapses.map(synapse => {
@@ -301,7 +300,6 @@ export class MongoStorageAdapter implements IStorageAdapter {
         filter: { _id: new mongoose.Types.ObjectId(id) },
         update: {
           $set: { isAnalyzed: true },
-          $addToSet: { 'analysis.tags': { $each: topic.tags } },
           $inc: { 'analysis.strength': topic.importance || 1 },
         },
       },
@@ -328,14 +326,12 @@ export class MongoStorageAdapter implements IStorageAdapter {
     const existing = await LongTermMemory.findOne({ userId, topic });
     if (existing) {
       existing.summary = memoryData.summary;
-      existing.tags = [...new Set([...existing.tags, ...memoryData.tags])];
       existing.sourceEntryIds = entries.map(e => new mongoose.Types.ObjectId(e._id.toString()));
       await existing.save();
     } else {
       await LongTermMemory.create({
         userId,
         summary: memoryData.summary,
-        tags: memoryData.tags,
         topic,
         sourceEntryIds: entries.map(e => new mongoose.Types.ObjectId(e._id.toString())),
         strength: BRAIN.LTM_INITIAL_STRENGTH,

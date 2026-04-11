@@ -20,11 +20,11 @@ Pomysł na poprawę klasyfikacji intencji:
 - nie rozwiązuje hardcoded rozwiązań ale poprawia routing
 - do przemyślenia jak połączyć z obecnym rule engine
 
-## Kategorie — zastąpić tagami ✅ DONE
-- Hardcoded kategorie usunięte z całego frameworka (0.2.9)
-- LTM grupuje po top shared tags zamiast kategorii
-- TODO (opcjonalne): pozwolić użytkownikowi przekazać domain hints do analyze.prompt
-  żeby model generował tagi specyficzne dla kontekstu (np. terminy prawne dla copyright-agenta)
+## Tagi — usunąć ✅ DONE (0.2.10)
+- Ten sam problem co kategorie: model generuje co chce, brak spójności
+- ("python", "Python", "programming", "kod" — to samo, różne tagi)
+- LTM groupowanie po shared tags było losowe
+- Rozwiązanie: usunięte całkowicie. Synapsy opierają się na semantyce (summary), nie tagach.
 
 ## ReAct agentic loop
 Obecny model: 1 wiadomość → klasyfikacja → 1 akcja → odpowiedź. Brak chainowania.

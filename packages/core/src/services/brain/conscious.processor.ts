@@ -43,14 +43,12 @@ async function analyzeWithSynapses(
   const deltaSummaries = deltaEntries.map(e => ({
     id: e._id.toString(),
     text: e.analysis?.summary || e.rawText.substring(0, 150),
-    tags: e.analysis?.tags?.slice(0, 5) || [],
     isNew: true,
   }));
 
   const contextSummaries = contextEntries.map(e => ({
     id: e._id.toString(),
     text: e.analysis?.summary || e.rawText.substring(0, 100),
-    tags: e.analysis?.tags?.slice(0, 3) || [],
     isNew: false,
   }));
 
@@ -92,7 +90,6 @@ async function createLongTermMemorySummary(
 ): Promise<LongTermMemoryData | null> {
   const entriesContent = entries.slice(0, BRAIN.LTM_MAX_SOURCE_ENTRIES).map(e => ({
     summary: e.analysis?.summary?.substring(0, 200) || e.rawText.substring(0, 200),
-    tags: e.analysis?.tags?.slice(0, 3) || [],
   }));
 
   const prompt = LONG_TERM_MEMORY_SUMMARY_PROMPT(topic, JSON.stringify(entriesContent));
@@ -182,16 +179,7 @@ export async function runConsciousProcessor(llm: ILLMAdapter, storage: IStorageA
       if (strongEntries.length > 0) {
         console.log(`👁️ [Świadomość]    Konsolidacja: ${strongEntries.length} silnych wspomnień`);
 
-        // Group by top shared tags instead of category
-        const allTags = strongEntries.flatMap(e => e.analysis?.tags || []);
-        const tagCounts = new Map<string, number>();
-        allTags.forEach(tag => tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1));
-        const topTags = [...tagCounts.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(([tag]) => tag);
-
-        const topic = topTags.join(' + ') || 'general';
+        const topic = 'general';
         console.log(`👁️ [Świadomość]    🧠 Tworzę LTM: "${topic}"`);
 
         const memoryData = await createLongTermMemorySummary(strongEntries, topic, llm);
