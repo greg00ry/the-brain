@@ -6,13 +6,9 @@ import {
 } from "@the-brain/core";
 import type {
   IVaultEntry,
-  ILongTermMemory,
   TopicAnalysis,
-  LongTermMemoryData,
 } from "@the-brain/core";
 import { VaultEntry, IVaultEntryDoc } from "./models/VaultEntry.js";
-import { Category } from "./models/Category.js";
-import { LongTermMemory } from "./models/LongTermMemory.js";
 import { Synapse } from "./models/Synapse.js";
 import { Action } from "./models/Action.js";
 import { ChatHistory } from "./models/ChatHistory.js";
@@ -90,18 +86,9 @@ export class MongoStorageAdapter implements IStorageAdapter {
 
   // ─── Vault ────────────────────────────────────────────────────────────────
 
-  async getVaultData(userId: string): Promise<{
-    entries: IVaultEntry[];
-    memories: ILongTermMemory[];
-  }> {
-    const [entries, memories] = await Promise.all([
-      VaultEntry.find({ userId }).sort({ createdAt: -1 }),
-      LongTermMemory.find({ userId }).sort({ createdAt: -1 }),
-    ]);
-    return {
-      entries: entries as unknown as IVaultEntry[],
-      memories: memories as unknown as ILongTermMemory[],
-    };
+  async getVaultData(userId: string): Promise<{ entries: IVaultEntry[] }> {
+    const entries = await VaultEntry.find({ userId }).sort({ createdAt: -1 });
+    return { entries: entries as unknown as IVaultEntry[] };
   }
 
   async deleteVaultEntry(entryId: string, userId: string): Promise<IVaultEntry | null> {
@@ -309,53 +296,10 @@ export class MongoStorageAdapter implements IStorageAdapter {
     return ops.length;
   }
 
-  async findStrongEntries(userId: string): Promise<IVaultEntry[]> {
-    return VaultEntry.find({
-      userId,
-      'analysis.strength': { $gte: BRAIN.STRENGTH_LTM_THRESHOLD },
-      isConsolidated: false,
-    }) as unknown as IVaultEntry[];
-  }
-
-  async upsertLTM(
-    userId: string,
-    topic: string,
-    memoryData: LongTermMemoryData,
-    entries: IVaultEntry[]
-  ): Promise<void> {
-    const existing = await LongTermMemory.findOne({ userId, topic });
-    if (existing) {
-      existing.summary = memoryData.summary;
-      existing.sourceEntryIds = entries.map(e => new mongoose.Types.ObjectId(e._id.toString()));
-      await existing.save();
-    } else {
-      await LongTermMemory.create({
-        userId,
-        summary: memoryData.summary,
-        topic,
-        sourceEntryIds: entries.map(e => new mongoose.Types.ObjectId(e._id.toString())),
-        strength: BRAIN.LTM_INITIAL_STRENGTH,
-      });
-    }
-  }
-
-  async markConsolidated(entries: IVaultEntry[]): Promise<void> {
-    await VaultEntry.updateMany(
-      { _id: { $in: entries.map(e => new mongoose.Types.ObjectId(e._id.toString())) } },
-      { $set: { isConsolidated: true } }
-    );
-  }
-
   // ─── Subconscious Routine ─────────────────────────────────────────────────
-
-  async getConsolidatedEntryIds(): Promise<string[]> {
-    const ids = await LongTermMemory.distinct('sourceEntryIds');
-    return ids.map((id: unknown) => String(id));
-  }
 
   async findEntriesToDecay(since: Date): Promise<IVaultEntry[]> {
     return VaultEntry.find({
-      isConsolidated: false,
       isPermanent: { $ne: true },
       lastActivityAt: { $lt: since },
       'analysis.strength': { $gt: 0 },
@@ -377,7 +321,6 @@ export class MongoStorageAdapter implements IStorageAdapter {
   async pruneDeadEntries(): Promise<number> {
     const result = await VaultEntry.deleteMany({
       'analysis.strength': { $lte: BRAIN.STRENGTH_DECAY_PRUNE },
-      isConsolidated: false,
       isPermanent: { $ne: true },
     });
     return result.deletedCount;
@@ -388,13 +331,6 @@ export class MongoStorageAdapter implements IStorageAdapter {
       weight: { $lte: BRAIN.SYNAPSE_PRUNE_WEIGHT },
     });
     return result.deletedCount;
-  }
-
-  async findEntriesReadyForLTM(): Promise<IVaultEntry[]> {
-    return VaultEntry.find({
-      'analysis.strength': { $gte: BRAIN.STRENGTH_LTM_THRESHOLD },
-      isConsolidated: false,
-    }).select('_id') as unknown as IVaultEntry[];
   }
 
   async countEntries(): Promise<number> {

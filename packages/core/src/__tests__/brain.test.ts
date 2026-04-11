@@ -29,17 +29,12 @@ function makeMockStorage(): IStorageAdapter {
     findDeltaEntries: vi.fn().mockResolvedValue([]),
     findContextEntries: vi.fn().mockResolvedValue([]),
     applyTopicAnalysis: vi.fn().mockResolvedValue(0),
-    findStrongEntries: vi.fn().mockResolvedValue([]),
-    upsertLTM: vi.fn().mockResolvedValue(undefined),
-    markConsolidated: vi.fn().mockResolvedValue(undefined),
     getSynapsesBySource: vi.fn().mockResolvedValue([]),
     processSynapseLinks: vi.fn().mockResolvedValue(0),
-    getConsolidatedEntryIds: vi.fn().mockResolvedValue([]),
     findEntriesToDecay: vi.fn().mockResolvedValue([]),
     decayEntries: vi.fn().mockResolvedValue(0),
     pruneDeadEntries: vi.fn().mockResolvedValue(0),
     pruneDeadSynapses: vi.fn().mockResolvedValue(0),
-    findEntriesReadyForLTM: vi.fn().mockResolvedValue([]),
     countEntries: vi.fn().mockResolvedValue(0),
     removeAction: vi.fn().mockResolvedValue(undefined),
   } as unknown as IStorageAdapter;
@@ -264,7 +259,6 @@ describe("Brain", () => {
 
   it("runMaintenance calls subconscious and conscious processors", async () => {
     await brain.runMaintenance();
-    expect(storage.getConsolidatedEntryIds).toHaveBeenCalled();
     expect(storage.pruneDeadEntries).toHaveBeenCalled();
     expect(storage.getUniqueUserIds).toHaveBeenCalled();
   });
@@ -273,8 +267,8 @@ describe("Brain", () => {
 
   it("maintenance is triggered after every 20th SAVE_ONLY (fire and forget)", async () => {
     const maintenanceSpy = vi.spyOn(brain, "runMaintenance").mockResolvedValue({
-      subStats: { decayed: 0, pruned: 0, readyForLTM: 0, totalProcessed: 0 },
-      consciousStats: { analyzed: 0, consolidated: 0, synapsesCreated: 0 },
+      subStats: { decayed: 0, pruned: 0, totalProcessed: 0 },
+      consciousStats: { analyzed: 0, synapsesCreated: 0 },
     });
 
     for (let i = 0; i < 20; i++) {
@@ -287,8 +281,8 @@ describe("Brain", () => {
 
   it("maintenance not triggered before 20th save", async () => {
     const maintenanceSpy = vi.spyOn(brain, "runMaintenance").mockResolvedValue({
-      subStats: { decayed: 0, pruned: 0, readyForLTM: 0, totalProcessed: 0 },
-      consciousStats: { analyzed: 0, consolidated: 0, synapsesCreated: 0 },
+      subStats: { decayed: 0, pruned: 0, totalProcessed: 0 },
+      consciousStats: { analyzed: 0, synapsesCreated: 0 },
     });
 
     for (let i = 0; i < 19; i++) {

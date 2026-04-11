@@ -39,7 +39,6 @@ describe("createEntry / getEntryById", () => {
     expect(found?.rawText).toBe("I prefer TypeScript");
     expect(found?.analysis?.strength).toBe(5);
     expect(found?.isAnalyzed).toBe(true);
-    expect(found?.isConsolidated).toBe(false);
   });
 
   it("returns null for unknown id", async () => {
@@ -291,24 +290,6 @@ describe("decay / pruning (subconscious routine)", () => {
     expect(pruned).toBe(1);
   });
 
-  it("findEntriesReadyForLTM returns entries with strength >= 10", async () => {
-    const s = makeAdapter();
-    await s.createEntry("user-1", "strong memory", makeAnalysis({ strength: 10 }));
-    await s.createEntry("user-1", "weak memory", makeAnalysis({ strength: 4 }));
-    const ready = await s.findEntriesReadyForLTM();
-    expect(ready).toHaveLength(1);
-    expect(ready[0].rawText).toBe("strong memory");
-  });
-
-  it("getConsolidatedEntryIds returns only consolidated entries", async () => {
-    const s = makeAdapter();
-    const e1 = await s.createEntry("user-1", "consolidated", makeAnalysis());
-    await s.createEntry("user-1", "not consolidated", makeAnalysis());
-    await s.markConsolidated([e1]);
-    const ids = await s.getConsolidatedEntryIds();
-    expect(ids).toContain(e1._id.toString());
-    expect(ids).toHaveLength(1);
-  });
 });
 
 // ─── Synapses ─────────────────────────────────────────────────────────────────
@@ -374,60 +355,15 @@ describe("processSynapseLinks / getSynapsesBySource", () => {
   });
 });
 
-// ─── Long-term Memory ─────────────────────────────────────────────────────────
-
-describe("upsertLTM / markConsolidated / findStrongEntries", () => {
-  it("upserts long-term memory", async () => {
-    const s = makeAdapter();
-    const e1 = await s.createEntry("user-1", "strong entry", makeAnalysis({ strength: 10 }));
-    await s.upsertLTM("user-1", "Programming Preferences", {
-      summary: "User prefers TypeScript",
-    }, [e1]);
-    const { memories } = await s.getVaultData("user-1");
-    expect(memories).toHaveLength(1);
-    expect(memories[0].topic).toBe("Programming Preferences");
-    expect(memories[0].summary).toBe("User prefers TypeScript");
-  });
-
-  it("markConsolidated sets isConsolidated flag", async () => {
-    const s = makeAdapter();
-    const e1 = await s.createEntry("user-1", "to consolidate", makeAnalysis({ strength: 10 }));
-    await s.markConsolidated([e1]);
-    const updated = await s.getEntryById(e1._id.toString());
-    expect(updated?.isConsolidated).toBe(true);
-  });
-
-  it("findStrongEntries returns only non-consolidated entries with strength >= 10", async () => {
-    const s = makeAdapter();
-    const strong = await s.createEntry("user-1", "strong", makeAnalysis({ strength: 10 }));
-    const weak = await s.createEntry("user-1", "weak", makeAnalysis({ strength: 4 }));
-    const consolidated = await s.createEntry("user-1", "consolidated", makeAnalysis({ strength: 10 }));
-    await s.markConsolidated([consolidated]);
-    const results = await s.findStrongEntries("user-1");
-    expect(results.map(e => e._id.toString())).toContain(strong._id.toString());
-    expect(results.map(e => e._id.toString())).not.toContain(weak._id.toString());
-    expect(results.map(e => e._id.toString())).not.toContain(consolidated._id.toString());
-  });
-});
-
 // ─── Conscious Processor ──────────────────────────────────────────────────────
 
 describe("findDeltaEntries / findContextEntries / applyTopicAnalysis", () => {
-  it("findDeltaEntries returns analyzed non-consolidated entries since date", async () => {
+  it("findDeltaEntries returns analyzed entries since date", async () => {
     const s = makeAdapter();
     const entry = await s.createEntry("user-1", "recent entry", makeAnalysis());
     const past = new Date(Date.now() - 60_000);
     const delta = await s.findDeltaEntries("user-1", past);
     expect(delta.map(e => e._id.toString())).toContain(entry._id.toString());
-  });
-
-  it("findDeltaEntries excludes consolidated entries", async () => {
-    const s = makeAdapter();
-    const entry = await s.createEntry("user-1", "consolidated entry", makeAnalysis());
-    await s.markConsolidated([entry]);
-    const past = new Date(Date.now() - 60_000);
-    const delta = await s.findDeltaEntries("user-1", past);
-    expect(delta.map(e => e._id.toString())).not.toContain(entry._id.toString());
   });
 
   it("findContextEntries excludes given ids", async () => {

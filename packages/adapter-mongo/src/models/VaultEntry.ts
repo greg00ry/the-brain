@@ -14,19 +14,11 @@ const vaultEntrySchema = new mongoose.Schema({
 
   analysis: {
     summary: { type: String },
-    tags: [{ type: String }],
     strength: { type: Number, min: 0, max: 10, default: 5 },
-    category: { type: String },
     isProcessed: { type: Boolean, default: false },
   },
 
   isAnalyzed: {
-    type: Boolean,
-    default: false,
-    index: true,
-  },
-
-  isConsolidated: {
     type: Boolean,
     default: false,
     index: true,
@@ -77,14 +69,11 @@ export interface IVaultEntryDoc extends mongoose.Document {
   rawText: string;
   analysis?: {
     summary: string;
-    tags: string[];
     strength: number;
-    category: string;
     isProcessed: boolean;
   };
   embedding?: number[];
   isAnalyzed: boolean;
-  isConsolidated: boolean;
   isPermanent: boolean;
   lastActivityAt: Date;
   createdAt: Date;

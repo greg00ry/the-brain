@@ -3,10 +3,8 @@ import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoStorageAdapter } from "../MongoStorageAdapter.js";
 import { VaultEntry } from "../models/VaultEntry.js";
-import { Category } from "../models/Category.js";
 import { Action } from "../models/Action.js";
 import { ChatHistory } from "../models/ChatHistory.js";
-import { LongTermMemory } from "../models/LongTermMemory.js";
 import { Synapse } from "../models/Synapse.js";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -28,10 +26,8 @@ afterAll(async () => {
 beforeEach(async () => {
   await Promise.all([
     VaultEntry.deleteMany({}),
-    Category.deleteMany({}),
     Action.deleteMany({}),
     ChatHistory.deleteMany({}),
-    LongTermMemory.deleteMany({}),
     Synapse.deleteMany({}),
   ]);
 });
@@ -49,10 +45,6 @@ function makeAnalysis(overrides = {}) {
 
 async function seedEntry(userId = "user-1", rawText = "test entry", analysisOverrides = {}) {
   return adapter.createEntry(userId, rawText, makeAnalysis(analysisOverrides));
-}
-
-async function seedCategory(name = "Tech", order = 0) {
-  return Category.create({ name, description: `${name} category`, order });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -73,10 +65,9 @@ describe("createEntry", () => {
     expect(entry.analysis?.strength).toBe(7);
   });
 
-  it("sets isAnalyzed=false and isConsolidated=false by default", async () => {
+  it("sets isAnalyzed=false by default", async () => {
     const entry = await seedEntry();
     expect(entry.isAnalyzed).toBe(false);
-    expect(entry.isConsolidated).toBe(false);
   });
 });
 
@@ -134,10 +125,9 @@ describe("getVaultData", () => {
     expect(data.entries).toHaveLength(2);
   });
 
-  it("returns empty arrays when user has no data", async () => {
+  it("returns empty entries when user has no data", async () => {
     const data = await adapter.getVaultData("ghost-user");
     expect(data.entries).toHaveLength(0);
-    expect(data.memories).toHaveLength(0);
   });
 });
 
@@ -260,7 +250,7 @@ describe("findRelevantEntries", () => {
   });
 
   it("does not return entries from other users", async () => {
-    await seedEntry("user-2", "python tips", { tags: ["python"] });
+    await seedEntry("user-2", "python tips");
     const results = await adapter.findRelevantEntries("user-1", ["python"]);
     expect(results).toHaveLength(0);
   });
@@ -300,7 +290,6 @@ describe("findSimilarEntries", () => {
     await adapter.updateEntryEmbedding(e2._id.toString(), [0, 1, 0]);
     await adapter.updateEntryEmbedding(e3._id.toString(), [0.9, 0.1, 0]);
 
-    // query closest to [1,0,0] — e1 and e3 should rank highest
     const results = await adapter.findSimilarEntries("user-1", [1, 0, 0], 2);
     expect(results).toHaveLength(2);
     const ids = results.map(r => r._id.toString());
@@ -541,99 +530,16 @@ describe("applyTopicAnalysis", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// findStrongEntries / upsertLTM / markConsolidated
+// Subconscious: findEntriesToDecay / decayEntries / pruneDeadEntries
+//               pruneDeadSynapses / countEntries
 // ═══════════════════════════════════════════════════════════════════════════════
-
-describe("findStrongEntries", () => {
-  it("returns entries with strength >= 10 and not consolidated", async () => {
-    await seedEntry("user-1", "strong", { strength: 10 });
-    await seedEntry("user-1", "weak", { strength: 5 });
-    const results = await adapter.findStrongEntries("user-1");
-    expect(results).toHaveLength(1);
-    expect(results[0].rawText).toBe("strong");
-  });
-
-  it("excludes consolidated entries", async () => {
-    const e = await seedEntry("user-1", "consolidated", { strength: 10 });
-    await VaultEntry.updateOne({ _id: e._id }, { isConsolidated: true });
-    const results = await adapter.findStrongEntries("user-1");
-    expect(results).toHaveLength(0);
-  });
-});
-
-describe("upsertLTM", () => {
-  it("creates a new LTM record", async () => {
-    const entry = await seedEntry("user-1", "python knowledge", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", { summary: "Python summary" }, [entry]);
-    const ltm = await LongTermMemory.findOne({ userId: "user-1", topic: "Python" });
-    expect(ltm).not.toBeNull();
-    expect(ltm!.summary).toBe("Python summary");
-  });
-
-  it("updates existing LTM (same topic)", async () => {
-    const e1 = await seedEntry("user-1", "entry1", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", { summary: "v1" }, [e1]);
-
-    const e2 = await seedEntry("user-1", "entry2", { strength: 10 });
-    await adapter.upsertLTM("user-1", "Python", { summary: "v2" }, [e2]);
-
-    const ltm = await LongTermMemory.findOne({ userId: "user-1", topic: "Python" });
-    expect(ltm!.summary).toBe("v2");
-    const count = await LongTermMemory.countDocuments({ userId: "user-1", topic: "Python" });
-    expect(count).toBe(1);
-  });
-});
-
-describe("markConsolidated", () => {
-  it("sets isConsolidated=true on given entries", async () => {
-    const e1 = await seedEntry("user-1", "e1");
-    const e2 = await seedEntry("user-1", "e2");
-    await adapter.markConsolidated([e1, e2]);
-    const updated = await VaultEntry.find({ _id: { $in: [e1._id, e2._id] } }).lean();
-    expect(updated.every(e => e.isConsolidated)).toBe(true);
-  });
-
-  it("does not affect other entries", async () => {
-    const e1 = await seedEntry("user-1", "mark");
-    const e2 = await seedEntry("user-1", "leave");
-    await adapter.markConsolidated([e1]);
-    const untouched = await VaultEntry.findById(e2._id).lean();
-    expect(untouched!.isConsolidated).toBe(false);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Subconscious: getConsolidatedEntryIds / findEntriesToDecay / decayEntries
-//               pruneDeadEntries / pruneDeadSynapses / findEntriesReadyForLTM / countEntries
-// ═══════════════════════════════════════════════════════════════════════════════
-
-describe("getConsolidatedEntryIds", () => {
-  it("returns entry ids referenced in LTM sourceEntryIds", async () => {
-    const e1 = await seedEntry("user-1", "consolidated entry");
-    await LongTermMemory.create({
-      userId: "user-1",
-      summary: "s",
-      tags: [],
-      topic: "t",
-      sourceEntryIds: [new mongoose.Types.ObjectId(e1._id.toString())],
-    });
-    const ids = await adapter.getConsolidatedEntryIds();
-    expect(ids).toContain(e1._id.toString());
-  });
-
-  it("returns empty array when no LTM records", async () => {
-    const ids = await adapter.getConsolidatedEntryIds();
-    expect(ids).toHaveLength(0);
-  });
-});
 
 describe("findEntriesToDecay", () => {
-  it("returns non-consolidated entries with strength > 0 and lastActivityAt < since", async () => {
+  it("returns entries with strength > 0 and lastActivityAt < since", async () => {
     const old = new Date("2020-01-01");
     await VaultEntry.create({
       userId: "user-1",
       rawText: "old entry",
-      isConsolidated: false,
       lastActivityAt: old,
       analysis: { strength: 3 },
     });
@@ -642,23 +548,10 @@ describe("findEntriesToDecay", () => {
     expect(results).toHaveLength(1);
   });
 
-  it("excludes consolidated entries", async () => {
-    await VaultEntry.create({
-      userId: "user-1",
-      rawText: "consolidated",
-      isConsolidated: true,
-      lastActivityAt: new Date("2020-01-01"),
-      analysis: { strength: 5 },
-    });
-    const results = await adapter.findEntriesToDecay(new Date());
-    expect(results).toHaveLength(0);
-  });
-
   it("excludes entries with strength 0", async () => {
     await VaultEntry.create({
       userId: "user-1",
       rawText: "dead",
-      isConsolidated: false,
       lastActivityAt: new Date("2020-01-01"),
       analysis: { strength: 0 },
     });
@@ -692,24 +585,15 @@ describe("decayEntries", () => {
 });
 
 describe("pruneDeadEntries", () => {
-  it("deletes non-consolidated entries with strength <= 0", async () => {
+  it("deletes entries with strength <= 0", async () => {
     await VaultEntry.create({
-      userId: "user-1", rawText: "dead", isConsolidated: false,
+      userId: "user-1", rawText: "dead",
       analysis: { strength: 0 },
     });
     await seedEntry("user-1", "alive", { strength: 3 });
     const count = await adapter.pruneDeadEntries();
     expect(count).toBe(1);
     expect(await VaultEntry.countDocuments()).toBe(1);
-  });
-
-  it("does not delete consolidated entries with strength 0", async () => {
-    await VaultEntry.create({
-      userId: "user-1", rawText: "consolidated dead", isConsolidated: true,
-      analysis: { strength: 0 },
-    });
-    const count = await adapter.pruneDeadEntries();
-    expect(count).toBe(0);
   });
 });
 
@@ -739,22 +623,6 @@ describe("pruneDeadSynapses", () => {
     });
     const count = await adapter.pruneDeadSynapses();
     expect(count).toBe(0);
-  });
-});
-
-describe("findEntriesReadyForLTM", () => {
-  it("returns non-consolidated entries with strength >= 10", async () => {
-    await seedEntry("user-1", "ready", { strength: 10 });
-    await seedEntry("user-1", "not ready", { strength: 5 });
-    const results = await adapter.findEntriesReadyForLTM();
-    expect(results).toHaveLength(1);
-  });
-
-  it("excludes consolidated entries", async () => {
-    const e = await seedEntry("user-1", "consolidated", { strength: 10 });
-    await VaultEntry.updateOne({ _id: e._id }, { isConsolidated: true });
-    const results = await adapter.findEntriesReadyForLTM();
-    expect(results).toHaveLength(0);
   });
 });
 

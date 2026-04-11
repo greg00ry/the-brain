@@ -1,4 +1,4 @@
-import { IVaultEntry, ILongTermMemory, TopicAnalysis, LongTermMemoryData } from "../types/brain.js";
+import { IVaultEntry, TopicAnalysis } from "../types/brain.js";
 
 export interface ActionInfo {
   name: string;
@@ -18,10 +18,7 @@ export interface IStorageAdapter {
   getEntryById(entryId: string): Promise<IVaultEntry | null>;
 
   // ─── Vault ────────────────────────────────────────────────────────────────
-  getVaultData(userId: string): Promise<{
-    entries: IVaultEntry[];
-    memories: ILongTermMemory[];
-  }>;
+  getVaultData(userId: string): Promise<{ entries: IVaultEntry[] }>;
   deleteVaultEntry(entryId: string, userId: string): Promise<IVaultEntry | null>;
 
   // ─── Shared ───────────────────────────────────────────────────────────────
@@ -47,14 +44,6 @@ export interface IStorageAdapter {
   findDeltaEntries(userId: string, since: Date): Promise<IVaultEntry[]>;
   findContextEntries(userId: string, excludeIds: string[]): Promise<IVaultEntry[]>;
   applyTopicAnalysis(topic: TopicAnalysis): Promise<number>;
-  findStrongEntries(userId: string): Promise<IVaultEntry[]>;
-  upsertLTM(
-    userId: string,
-    topic: string,
-    memoryData: LongTermMemoryData,
-    entries: IVaultEntry[]
-  ): Promise<void>;
-  markConsolidated(entries: IVaultEntry[]): Promise<void>;
 
   // ─── Synapse Queries & Management ────────────────────────────────────────
   getSynapsesBySource(entryId: string, limit: number): Promise<{
@@ -72,11 +61,9 @@ export interface IStorageAdapter {
   }[], deltaEntryIds: Set<string>): Promise<number>;
 
   // ─── Subconscious Routine ─────────────────────────────────────────────────
-  getConsolidatedEntryIds(): Promise<string[]>;
   findEntriesToDecay(since: Date): Promise<IVaultEntry[]>;
   decayEntries(entryIds: { toString(): string }[]): Promise<number>;
   pruneDeadEntries(): Promise<number>;
   pruneDeadSynapses(): Promise<number>;
-  findEntriesReadyForLTM(): Promise<IVaultEntry[]>;
   countEntries(): Promise<number>;
 }

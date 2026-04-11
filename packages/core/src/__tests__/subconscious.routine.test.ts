@@ -14,44 +14,41 @@ function makeEntry(overrides: Partial<IVaultEntry> = {}): IVaultEntry {
     userId: "user-1",
     rawText: "test entry",
     isAnalyzed: true,
-    isConsolidated: false,
+    isPermanent: false,
     lastActivityAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
     createdAt: new Date(),
     updatedAt: new Date(),
-    analysis: { summary: "test", tags: ["tag"], strength: 5, category: "Tech", isProcessed: true },
+    analysis: { summary: "test", strength: 5, isProcessed: true },
     ...overrides,
   };
 }
 
 function makeStorage(overrides: Partial<IStorageAdapter> = {}): IStorageAdapter {
   return {
-    getConsolidatedEntryIds: vi.fn().mockResolvedValue([]),
     findEntriesToDecay: vi.fn().mockResolvedValue([]),
     decayEntries: vi.fn().mockResolvedValue(0),
     pruneDeadEntries: vi.fn().mockResolvedValue(0),
     pruneDeadSynapses: vi.fn().mockResolvedValue(0),
-    findEntriesReadyForLTM: vi.fn().mockResolvedValue([]),
     countEntries: vi.fn().mockResolvedValue(0),
     // unused but required by interface
     createEntry: vi.fn(),
     getEntryById: vi.fn(),
     getVaultData: vi.fn(),
     deleteVaultEntry: vi.fn(),
-    getCategories: vi.fn(),
     getUniqueUserIds: vi.fn(),
     getActions: vi.fn(),
     upsertAction: vi.fn(),
+    removeAction: vi.fn(),
     getChatHistory: vi.fn(),
     appendChatMessage: vi.fn(),
+    getUserProfile: vi.fn(),
+    upsertUserProfile: vi.fn(),
     findRelevantEntries: vi.fn(),
     findSimilarEntries: vi.fn(),
     updateEntryEmbedding: vi.fn(),
     findDeltaEntries: vi.fn(),
     findContextEntries: vi.fn(),
     applyTopicAnalysis: vi.fn(),
-    findStrongEntries: vi.fn(),
-    upsertLTM: vi.fn(),
-    markConsolidated: vi.fn(),
     getSynapsesBySource: vi.fn(),
     processSynapseLinks: vi.fn(),
     ...overrides,
@@ -70,13 +67,12 @@ describe("runSubconsciousRoutine", () => {
     const stats = await runSubconsciousRoutine(storage);
     expect(stats.decayed).toBe(0);
     expect(stats.pruned).toBe(0);
-    expect(stats.readyForLTM).toBe(0);
     expect(stats.totalProcessed).toBe(0);
   });
 
   // ─── Phase 1: Decay ─────────────────────────────────────────────────────
 
-  it("decays entries that are not consolidated", async () => {
+  it("decays entries that are inactive", async () => {
     const entries = [makeEntry(), makeEntry()];
     const storage = makeStorage({
       findEntriesToDecay: vi.fn().mockResolvedValue(entries),
@@ -87,30 +83,6 @@ describe("runSubconsciousRoutine", () => {
     expect(stats.decayed).toBe(2);
   });
 
-  it("skips consolidated entries during decay", async () => {
-    const e1 = makeEntry();
-    const e2 = makeEntry();
-    const storage = makeStorage({
-      getConsolidatedEntryIds: vi.fn().mockResolvedValue([e1._id.toString()]),
-      findEntriesToDecay: vi.fn().mockResolvedValue([e1, e2]),
-      decayEntries: vi.fn().mockResolvedValue(1),
-    });
-    await runSubconsciousRoutine(storage);
-    const calledWith = (storage.decayEntries as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    // only e2 should be passed — e1 is consolidated
-    expect(calledWith.map((id: { toString(): string }) => id.toString())).toEqual([e2._id.toString()]);
-  });
-
-  it("does not call decayEntries when all entries are consolidated", async () => {
-    const e = makeEntry();
-    const storage = makeStorage({
-      getConsolidatedEntryIds: vi.fn().mockResolvedValue([e._id.toString()]),
-      findEntriesToDecay: vi.fn().mockResolvedValue([e]),
-    });
-    await runSubconsciousRoutine(storage);
-    expect(storage.decayEntries).not.toHaveBeenCalled();
-  });
-
   it("does not call decayEntries when no entries to decay", async () => {
     const storage = makeStorage({
       findEntriesToDecay: vi.fn().mockResolvedValue([]),
@@ -119,7 +91,7 @@ describe("runSubconsciousRoutine", () => {
     expect(storage.decayEntries).not.toHaveBeenCalled();
   });
 
-  it("passes correct ids to decayEntries (multiple non-consolidated)", async () => {
+  it("passes correct ids to decayEntries (multiple entries)", async () => {
     const entries = [makeEntry(), makeEntry(), makeEntry()];
     const storage = makeStorage({
       findEntriesToDecay: vi.fn().mockResolvedValue(entries),
@@ -166,25 +138,6 @@ describe("runSubconsciousRoutine", () => {
     expect(stats.pruned).toBe(0);
   });
 
-  // ─── Phase 3: Ready for LTM ──────────────────────────────────────────────
-
-  it("counts entries ready for LTM", async () => {
-    const strong = [makeEntry({ analysis: { summary: "s", tags: [], strength: 10, category: "Tech", isProcessed: true } }), makeEntry({ analysis: { summary: "s", tags: [], strength: 10, category: "Tech", isProcessed: true } })];
-    const storage = makeStorage({
-      findEntriesReadyForLTM: vi.fn().mockResolvedValue(strong),
-    });
-    const stats = await runSubconsciousRoutine(storage);
-    expect(stats.readyForLTM).toBe(2);
-  });
-
-  it("readyForLTM is 0 when no strong entries", async () => {
-    const storage = makeStorage({
-      findEntriesReadyForLTM: vi.fn().mockResolvedValue([]),
-    });
-    const stats = await runSubconsciousRoutine(storage);
-    expect(stats.readyForLTM).toBe(0);
-  });
-
   // ─── totalProcessed ──────────────────────────────────────────────────────
 
   it("reports total entries count", async () => {
@@ -197,26 +150,23 @@ describe("runSubconsciousRoutine", () => {
 
   // ─── Phase order ─────────────────────────────────────────────────────────
 
-  it("calls phases in correct order: consolidatedIds → findToDecay → prune → readyForLTM", async () => {
+  it("calls phases in correct order: findToDecay → prune", async () => {
     const callOrder: string[] = [];
     const storage = makeStorage({
-      getConsolidatedEntryIds: vi.fn().mockImplementation(async () => { callOrder.push("getConsolidated"); return []; }),
       findEntriesToDecay: vi.fn().mockImplementation(async () => { callOrder.push("findToDecay"); return []; }),
       pruneDeadEntries: vi.fn().mockImplementation(async () => { callOrder.push("pruneEntries"); return 0; }),
       pruneDeadSynapses: vi.fn().mockImplementation(async () => { callOrder.push("pruneSynapses"); return 0; }),
-      findEntriesReadyForLTM: vi.fn().mockImplementation(async () => { callOrder.push("findReadyForLTM"); return []; }),
     });
     await runSubconsciousRoutine(storage);
-    expect(callOrder[0]).toBe("getConsolidated");
-    expect(callOrder[1]).toBe("findToDecay");
-    expect(callOrder.indexOf("pruneEntries")).toBeLessThan(callOrder.indexOf("findReadyForLTM"));
+    expect(callOrder[0]).toBe("findToDecay");
+    expect(callOrder.indexOf("pruneEntries")).toBeGreaterThan(callOrder.indexOf("findToDecay"));
   });
 
   // ─── Error handling ──────────────────────────────────────────────────────
 
   it("returns partial stats when storage throws on decay", async () => {
     const storage = makeStorage({
-      getConsolidatedEntryIds: vi.fn().mockRejectedValue(new Error("DB down")),
+      findEntriesToDecay: vi.fn().mockRejectedValue(new Error("DB down")),
     });
     const stats = await runSubconsciousRoutine(storage);
     // should not throw, returns default stats

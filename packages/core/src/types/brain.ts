@@ -1,16 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // SHARED BRAIN DOMAIN TYPES
-// Kept here to avoid circular imports between conscious.processor and adapters.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface TopicAnalysis {
   topic: string;
   entryIds: string[];
   importance: number; // 1-10
-}
-
-export interface LongTermMemoryData {
-  summary: string;
 }
 
 // ─── Domain entity interfaces (framework-level, no mongoose dependency) ───────
@@ -26,21 +21,8 @@ export interface IVaultEntry {
   };
   embedding?: number[];
   isAnalyzed: boolean;
-  isConsolidated: boolean;
   isPermanent: boolean;
   lastActivityAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
-
-export interface ILongTermMemory {
-  _id: { toString(): string };
-  userId: string;
-  summary: string | null;
-  strength: number;
-  sourceEntryIds: { toString(): string }[];
-  topic: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-

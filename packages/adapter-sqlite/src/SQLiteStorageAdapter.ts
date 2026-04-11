@@ -6,9 +6,7 @@ import type {
   ActionInfo,
   EntryAnalysisData,
   IVaultEntry,
-  ILongTermMemory,
   TopicAnalysis,
-  LongTermMemoryData,
 } from "@the-brain/core";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -46,7 +44,6 @@ function toVaultEntry(row: Record<string, unknown>): IVaultEntry {
     } : undefined,
     embedding: row.embedding ? JSON.parse(String(row.embedding)) : undefined,
     isAnalyzed: Boolean(row.isAnalyzed),
-    isConsolidated: Boolean(row.isConsolidated),
     isPermanent: Boolean(row.isPermanent),
     lastActivityAt: new Date(String(row.lastActivityAt)),
     createdAt: new Date(String(row.createdAt)),
@@ -74,7 +71,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         strength      REAL DEFAULT 5,
         isProcessed   INTEGER DEFAULT 0,
         isAnalyzed    INTEGER DEFAULT 0,
-        isConsolidated INTEGER DEFAULT 0,
         isPermanent   INTEGER DEFAULT 0,
         embedding     TEXT,
         lastActivityAt TEXT NOT NULL,
@@ -90,17 +86,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         reason    TEXT DEFAULT '',
         createdAt TEXT NOT NULL,
         UNIQUE(sourceId, targetId)
-      );
-
-      CREATE TABLE IF NOT EXISTS long_term_memories (
-        id           TEXT PRIMARY KEY,
-        userId       TEXT NOT NULL,
-        topic        TEXT,
-        summary      TEXT,
-        strength     REAL DEFAULT 5,
-        sourceEntryIds TEXT DEFAULT '[]',
-        createdAt    TEXT NOT NULL,
-        updatedAt    TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS actions (
@@ -150,21 +135,9 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
 
   // ─── Vault ────────────────────────────────────────────────────────────────
 
-  async getVaultData(userId: string): Promise<{ entries: IVaultEntry[]; memories: ILongTermMemory[] }> {
+  async getVaultData(userId: string): Promise<{ entries: IVaultEntry[] }> {
     const entries = (this.db.prepare("SELECT * FROM vault_entries WHERE userId = ? ORDER BY createdAt DESC").all(userId) as Record<string, unknown>[]).map(toVaultEntry);
-
-    const memories = (this.db.prepare("SELECT * FROM long_term_memories WHERE userId = ?").all(userId) as Record<string, unknown>[]).map(row => ({
-      _id: { toString: () => String(row.id) },
-      userId: String(row.userId),
-      summary: row.summary ? String(row.summary) : null,
-      strength: Number(row.strength ?? 5),
-      sourceEntryIds: JSON.parse(String(row.sourceEntryIds ?? "[]")).map((id: string) => ({ toString: () => id })),
-      topic: row.topic ? String(row.topic) : null,
-      createdAt: new Date(String(row.createdAt)),
-      updatedAt: new Date(String(row.updatedAt)),
-    } as ILongTermMemory));
-
-    return { entries, memories };
+    return { entries };
   }
 
   async deleteVaultEntry(entryId: string, userId: string): Promise<IVaultEntry | null> {
@@ -269,7 +242,7 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
 
   async findDeltaEntries(userId: string, since: Date): Promise<IVaultEntry[]> {
     const rows = this.db.prepare(
-      "SELECT * FROM vault_entries WHERE userId = ? AND isAnalyzed = 1 AND isConsolidated = 0 AND updatedAt > ? LIMIT 50"
+      "SELECT * FROM vault_entries WHERE userId = ? AND isAnalyzed = 1 AND updatedAt > ? LIMIT 50"
     ).all(userId, since.toISOString()) as Record<string, unknown>[];
     return rows.map(toVaultEntry);
   }
@@ -300,32 +273,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
       updated += result.changes;
     }
     return updated;
-  }
-
-  async findStrongEntries(userId: string): Promise<IVaultEntry[]> {
-    const rows = this.db.prepare(
-      "SELECT * FROM vault_entries WHERE userId = ? AND strength >= 10 AND isConsolidated = 0"
-    ).all(userId) as Record<string, unknown>[];
-    return rows.map(toVaultEntry);
-  }
-
-  async upsertLTM(userId: string, topic: string, memoryData: LongTermMemoryData, entries: IVaultEntry[]): Promise<void> {
-    const id = uid();
-    const now = new Date().toISOString();
-    const entryIds = JSON.stringify(entries.map(e => e._id.toString()));
-    this.db.prepare(`
-      INSERT INTO long_term_memories (id, userId, topic, summary, sourceEntryIds, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT DO NOTHING
-    `).run(id, userId, topic, memoryData.summary, entryIds, now, now);
-  }
-
-  async markConsolidated(entries: IVaultEntry[]): Promise<void> {
-    const stmt = this.db.prepare("UPDATE vault_entries SET isConsolidated = 1, updatedAt = ? WHERE id = ?");
-    const now = new Date().toISOString();
-    for (const entry of entries) {
-      stmt.run(now, entry._id.toString());
-    }
   }
 
   // ─── Synapse Queries & Management ────────────────────────────────────────
@@ -368,10 +315,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
 
   // ─── Subconscious Routine ─────────────────────────────────────────────────
 
-  async getConsolidatedEntryIds(): Promise<string[]> {
-    return (this.db.prepare("SELECT id FROM vault_entries WHERE isConsolidated = 1").all() as { id: string }[]).map(r => r.id);
-  }
-
   async findEntriesToDecay(since: Date): Promise<IVaultEntry[]> {
     const rows = this.db.prepare(
       "SELECT * FROM vault_entries WHERE lastActivityAt < ? AND strength > 0 AND isPermanent = 0"
@@ -401,13 +344,6 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         OR targetId NOT IN (SELECT id FROM vault_entries)
     `).run();
     return Number(result.changes);
-  }
-
-  async findEntriesReadyForLTM(): Promise<IVaultEntry[]> {
-    const rows = this.db.prepare(
-      "SELECT * FROM vault_entries WHERE strength >= 10 AND isConsolidated = 0"
-    ).all() as Record<string, unknown>[];
-    return rows.map(toVaultEntry);
   }
 
   async countEntries(): Promise<number> {

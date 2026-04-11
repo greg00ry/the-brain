@@ -27,11 +27,10 @@ function makeEntry(id: string, overrides: Partial<IVaultEntry> = {}): IVaultEntr
     userId: "user-1",
     rawText: `raw text for ${id}`,
     isAnalyzed: true,
-    isConsolidated: false,
     lastActivityAt: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
-    analysis: { summary: `summary of ${id}`, tags: [], strength: 5, category: "Tech", isProcessed: true },
+    analysis: { summary: `summary of ${id}`, strength: 5, isProcessed: true },
     ...overrides,
   };
 }
@@ -43,15 +42,14 @@ function makeStorage(overrides: Partial<IStorageAdapter> = {}): IStorageAdapter 
     findRelevantEntries: vi.fn().mockResolvedValue([]),
     // rest unused
     createEntry: vi.fn(), getEntryById: vi.fn(), getVaultData: vi.fn(),
-    deleteVaultEntry: vi.fn(), getCategories: vi.fn(), getUniqueUserIds: vi.fn(),
-    getActions: vi.fn(), upsertAction: vi.fn(), getChatHistory: vi.fn(),
+    deleteVaultEntry: vi.fn(), getUniqueUserIds: vi.fn(),
+    getActions: vi.fn(), upsertAction: vi.fn(), removeAction: vi.fn(), getChatHistory: vi.fn(),
     appendChatMessage: vi.fn(), updateEntryEmbedding: vi.fn(),
     findDeltaEntries: vi.fn(), findContextEntries: vi.fn(),
-    applyTopicAnalysis: vi.fn(), findStrongEntries: vi.fn(), upsertLTM: vi.fn(),
-    markConsolidated: vi.fn(), processSynapseLinks: vi.fn(),
-    getConsolidatedEntryIds: vi.fn(), findEntriesToDecay: vi.fn(),
+    applyTopicAnalysis: vi.fn(), processSynapseLinks: vi.fn(),
+    findEntriesToDecay: vi.fn(),
     decayEntries: vi.fn(), pruneDeadEntries: vi.fn(), pruneDeadSynapses: vi.fn(),
-    findEntriesReadyForLTM: vi.fn(), countEntries: vi.fn(),
+    countEntries: vi.fn(),
     ...overrides,
   } as unknown as IStorageAdapter;
 }

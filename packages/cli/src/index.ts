@@ -100,8 +100,8 @@ program
     await setup();
     try {
       const { subStats, consciousStats } = await brain.runMaintenance();
-      console.log(`Subconscious: -${subStats.decayed} decayed, -${subStats.pruned} pruned, ${subStats.readyForLTM} ready for LTM`);
-      console.log(`Conscious:    +${consciousStats.synapsesCreated} synapses, ${consciousStats.consolidated} consolidated`);
+      console.log(`Subconscious: -${subStats.decayed} decayed, -${subStats.pruned} pruned`);
+      console.log(`Conscious:    +${consciousStats.synapsesCreated} synapses`);
     } finally {
       await teardown();
     }

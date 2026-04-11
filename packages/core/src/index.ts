@@ -22,9 +22,7 @@ export { OpenAICompatibleEmbeddingAdapter } from "./adapters/embedding/OpenAICom
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type {
   TopicAnalysis,
-  LongTermMemoryData,
   IVaultEntry,
-  ILongTermMemory,
 } from "./types/brain.js";
 
 // ─── Services (public API) ────────────────────────────────────────────────────

@@ -9,8 +9,8 @@ const { mockBrain, mockConnectDB, mockDisconnect } = vi.hoisted(() => {
     save: vi.fn().mockResolvedValue({ _id: "entry-123" }),
     recall: vi.fn().mockResolvedValue({ synapticTree: "memory tree", hasContext: true }),
     runMaintenance: vi.fn().mockResolvedValue({
-      subStats: { decayed: 2, pruned: 1, readyForLTM: 3 },
-      consciousStats: { synapsesCreated: 4, consolidated: 2 },
+      subStats: { decayed: 2, pruned: 1, totalProcessed: 0 },
+      consciousStats: { synapsesCreated: 4 },
     }),
   };
   return {
@@ -74,8 +74,8 @@ beforeEach(() => {
   mockBrain.save.mockResolvedValue({ _id: "entry-123" });
   mockBrain.recall.mockResolvedValue({ synapticTree: "memory tree", hasContext: true });
   mockBrain.runMaintenance.mockResolvedValue({
-    subStats: { decayed: 2, pruned: 1, readyForLTM: 3 },
-    consciousStats: { synapsesCreated: 4, consolidated: 2 },
+    subStats: { decayed: 2, pruned: 1, totalProcessed: 0 },
+    consciousStats: { synapsesCreated: 4 },
   });
   mockConnectDB.mockResolvedValue(undefined);
   mockDisconnect.mockResolvedValue(undefined);
@@ -232,23 +232,23 @@ describe("maintenance command", () => {
 
   it("prints subconscious stats", async () => {
     mockBrain.runMaintenance.mockResolvedValue({
-      subStats: { decayed: 5, pruned: 2, readyForLTM: 1 },
-      consciousStats: { synapsesCreated: 3, consolidated: 0 },
+      subStats: { decayed: 5, pruned: 2, totalProcessed: 10 },
+      consciousStats: { synapsesCreated: 3 },
     });
     await runCLI("maintenance");
     expect(consoleSpy).toHaveBeenCalledWith(
-      "Subconscious: -5 decayed, -2 pruned, 1 ready for LTM",
+      "Subconscious: -5 decayed, -2 pruned",
     );
   });
 
   it("prints conscious stats", async () => {
     mockBrain.runMaintenance.mockResolvedValue({
-      subStats: { decayed: 0, pruned: 0, readyForLTM: 0 },
-      consciousStats: { synapsesCreated: 7, consolidated: 3 },
+      subStats: { decayed: 0, pruned: 0, totalProcessed: 0 },
+      consciousStats: { synapsesCreated: 7 },
     });
     await runCLI("maintenance");
     expect(consoleSpy).toHaveBeenCalledWith(
-      "Conscious:    +7 synapses, 3 consolidated",
+      "Conscious:    +7 synapses",
     );
   });
 

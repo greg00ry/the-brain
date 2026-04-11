@@ -224,33 +224,6 @@ describe("findDeltaEntries edge cases", () => {
   });
 });
 
-// ─── upsertLTM edge cases ────────────────────────────────────────────────────
-
-describe("upsertLTM edge cases", () => {
-  it("stores multiple LTMs independently", async () => {
-    const s = makeAdapter();
-    const e1 = await s.createEntry("user-1", "A", makeAnalysis({ strength: 10 }));
-    const e2 = await s.createEntry("user-1", "B", makeAnalysis({ strength: 10 }));
-    await s.upsertLTM("user-1", "Topic A", { summary: "Summary A" }, [e1]);
-    await s.upsertLTM("user-1", "Topic B", { summary: "Summary B" }, [e2]);
-    const { memories } = await s.getVaultData("user-1");
-    expect(memories).toHaveLength(2);
-    expect(memories.map(m => m.topic)).toContain("Topic A");
-    expect(memories.map(m => m.topic)).toContain("Topic B");
-  });
-
-  it("stores source entry ids in LTM", async () => {
-    const s = makeAdapter();
-    const e1 = await s.createEntry("user-1", "source 1", makeAnalysis({ strength: 10 }));
-    const e2 = await s.createEntry("user-1", "source 2", makeAnalysis({ strength: 10 }));
-    await s.upsertLTM("user-1", "Topic", { summary: "S" }, [e1, e2]);
-    const { memories } = await s.getVaultData("user-1");
-    const ids = memories[0].sourceEntryIds.map(id => id.toString());
-    expect(ids).toContain(e1._id.toString());
-    expect(ids).toContain(e2._id.toString());
-  });
-});
-
 // ─── deleteVaultEntry removes synapses ───────────────────────────────────────
 
 describe("deleteVaultEntry cleans up synapses", () => {

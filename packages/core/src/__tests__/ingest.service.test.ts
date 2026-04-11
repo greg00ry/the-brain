@@ -30,7 +30,6 @@ function makeEntry(id = "entry-1"): IVaultEntry {
     userId: "user-1",
     rawText: "test",
     isAnalyzed: true,
-    isConsolidated: false,
     lastActivityAt: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -48,11 +47,10 @@ function makeStorage(entry = makeEntry()): IStorageAdapter {
     upsertAction: vi.fn(), getChatHistory: vi.fn(), appendChatMessage: vi.fn(),
     findRelevantEntries: vi.fn(), findSimilarEntries: vi.fn(),
     findDeltaEntries: vi.fn(), findContextEntries: vi.fn(),
-    applyTopicAnalysis: vi.fn(), findStrongEntries: vi.fn(), upsertLTM: vi.fn(),
-    markConsolidated: vi.fn(), processSynapseLinks: vi.fn(),
-    getConsolidatedEntryIds: vi.fn(), findEntriesToDecay: vi.fn(),
+    applyTopicAnalysis: vi.fn(), processSynapseLinks: vi.fn(),
+    findEntriesToDecay: vi.fn(),
     decayEntries: vi.fn(), pruneDeadEntries: vi.fn(), pruneDeadSynapses: vi.fn(),
-    findEntriesReadyForLTM: vi.fn(), countEntries: vi.fn(),
+    countEntries: vi.fn(),
     getSynapsesBySource: vi.fn(),
   } as unknown as IStorageAdapter;
 }
