@@ -29,9 +29,6 @@ export const LLM = {
   SAVE_TEMPERATURE: 0.8,
   SAVE_MAX_TOKENS: 300,
 
-  // LTM consolidation
-  LTM_TEMPERATURE: 0.3,
-  LTM_MAX_TOKENS: 800,
 } as const;
 
 // ─── Brain Processing ─────────────────────────────────────────────────────────
@@ -41,12 +38,7 @@ export const BRAIN = {
   BATCH_SIZE: 5,
   DELTA_WINDOW_MS: 24 * 60 * 60 * 1000, // 24h
 
-  // Long-term memory
-  LTM_MAX_SOURCE_ENTRIES: 10,
-  LTM_INITIAL_STRENGTH: 10,
-
   // Strength thresholds
-  STRENGTH_LTM_THRESHOLD: 10,      // entries >= this get consolidated to LTM
   STRENGTH_CONTEXT_MIN: 3,         // min strength for context entries
   STRENGTH_DECAY_PRUNE: 0,         // entries at this are pruned
 
