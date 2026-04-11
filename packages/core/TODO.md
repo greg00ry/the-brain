@@ -46,3 +46,20 @@ Multi-agent:
 - orchestrator (też Brain) routuje do właściwego agenta
 - agenci mogą wywoływać innych agentów przez akcje
 - do przemyślenia: jak przekazywać kontekst między agentami
+
+## Native Tool Calling (OpenAI function calling format)
+Prawdziwe modele (GPT-4, Claude, Gemini) mają wbudowany tool calling:
+- model sam decyduje kiedy wywołać tool
+- dostaje wynik i może wywołać kolejny
+- to jest natywny ReAct
+
+Obecny problem z naszą implementacją:
+- klasyfikacja intencji = osobny LLM call (nie natywny)
+- handler hardcoded w frameworku, wynik nie wraca do modelu
+- model nie "widzi" co się stało po akcji
+
+Cel: przekazać actions jako "tools" w formacie OpenAI function calling:
+- cloud (GPT-4, Claude): natywny tool calling działa od razu
+- local (llama, deepseek): słabe wsparcie dla function calling — tutaj nasz hybrid routing jest wartością
+
+To jest właśnie nasza przewaga: robimy żeby działało dobrze lokalnie tam gdzie cloud działa natywnie.
