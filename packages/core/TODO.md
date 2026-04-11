@@ -20,11 +20,11 @@ Pomysł na poprawę klasyfikacji intencji:
 - nie rozwiązuje hardcoded rozwiązań ale poprawia routing
 - do przemyślenia jak połączyć z obecnym rule engine
 
-## Kategorie — zastąpić tagami
-- Obecna lista hardcoded (`Work`, `Personal`, `Health`...) nie skaluje się dla custom agentów
-- Model przypisuje kategorię przy ingeście, LTM grupowane po kategorii w conscious.processor
-- Pomysł: zastąpić kategorię wolnymi tagami generowanymi przez model (np. `["prawo autorskie", "licencje", "dozwolony użytek"]`)
-- Wymaga zmiany: `analyze.service.ts`, `analyze.prompt.ts`, `conscious.processor.ts`, `types/brain.ts`
+## Kategorie — zastąpić tagami ✅ DONE
+- Hardcoded kategorie usunięte z całego frameworka (0.2.9)
+- LTM grupuje po top shared tags zamiast kategorii
+- TODO (opcjonalne): pozwolić użytkownikowi przekazać domain hints do analyze.prompt
+  żeby model generował tagi specyficzne dla kontekstu (np. terminy prawne dla copyright-agenta)
 
 ## ReAct agentic loop
 Obecny model: 1 wiadomość → klasyfikacja → 1 akcja → odpowiedź. Brak chainowania.
