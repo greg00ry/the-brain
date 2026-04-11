@@ -1,6 +1,6 @@
 {
   "name": "@the-brain/adapter-sqlite",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "SQLite storage adapter for @the-brain/core — zero-config, single-file database",
   "license": "AGPL-3.0",
   "publishConfig": {
