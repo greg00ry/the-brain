@@ -1,4 +1,5 @@
 import { ILLMAdapter } from "./adapters/ILLMAdapter.js";
+import { IVaultEntry } from "./types/brain.js";
 import { IStorageAdapter, ActionInfo } from "./adapters/IStorageAdapter.js";
 import { IEmbeddingAdapter } from "./adapters/IEmbeddingAdapter.js";
 import { classifyIntent, ChatMessage } from "./services/ai/intent.service.js";
@@ -40,7 +41,7 @@ export interface BrainConfig {
 export type ActionHandler = (
   userId: string,
   text: string,
-  context: { synapticTree: string; hasContext: boolean },
+  context: { synapticTree: string; relevantEntries: IVaultEntry[]; hasContext: boolean },
   llm: ILLMAdapter,
   chatHistory?: { role: string; content: string }[],
 ) => Promise<string>;
@@ -98,12 +99,16 @@ export class Brain {
     this._config = config;
     const basePersonality = config?.systemPrompt ?? PERSONALITY_SYSTEM_PROMPT;
 
-    this.handlers.set("RESEARCH_BRAIN", async (userId, text, { synapticTree, hasContext }, _llm, chatHistory) => {
+    this.handlers.set("RESEARCH_BRAIN", async (userId, text, { relevantEntries, hasContext }, _llm, chatHistory) => {
       const userProfile = await this.storage.getUserProfile(userId);
       const systemPrompt = buildSystemPrompt(basePersonality, userProfile);
 
+      const fullContext = relevantEntries
+        .map((e, i) => `[${i + 1}] ${e.rawText}`)
+        .join('\n\n---\n\n');
+
       const prompt = hasContext
-        ? RESEARCH_ANSWER_PROMPT(text, synapticTree, chatHistory)
+        ? RESEARCH_ANSWER_PROMPT(text, fullContext, chatHistory)
         : `The user asked: "${text}"\n\nYou don't have anything stored about this yet. Let them know and ask if they want to tell you more.`;
 
       const answer = await this.llm.complete({
