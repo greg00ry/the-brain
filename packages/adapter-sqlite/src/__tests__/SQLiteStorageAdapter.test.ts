@@ -12,9 +12,7 @@ function makeAdapter() {
 function makeAnalysis(overrides = {}) {
   return {
     summary: "Test summary",
-    tags: ["test"],
     strength: 5,
-    category: "Test",
     isProcessed: true,
     ...overrides,
   };
@@ -40,7 +38,6 @@ describe("createEntry / getEntryById", () => {
     expect(found).not.toBeNull();
     expect(found?.rawText).toBe("I prefer TypeScript");
     expect(found?.analysis?.strength).toBe(5);
-    expect(found?.analysis?.tags).toEqual(["test"]);
     expect(found?.isAnalyzed).toBe(true);
     expect(found?.isConsolidated).toBe(false);
   });
@@ -383,9 +380,8 @@ describe("upsertLTM / markConsolidated / findStrongEntries", () => {
   it("upserts long-term memory", async () => {
     const s = makeAdapter();
     const e1 = await s.createEntry("user-1", "strong entry", makeAnalysis({ strength: 10 }));
-    await s.upsertLTM("user-1", "Programming Preferences", "Programming", {
+    await s.upsertLTM("user-1", "Programming Preferences", {
       summary: "User prefers TypeScript",
-      tags: ["typescript", "programming"],
     }, [e1]);
     const { memories } = await s.getVaultData("user-1");
     expect(memories).toHaveLength(1);
@@ -443,19 +439,17 @@ describe("findDeltaEntries / findContextEntries / applyTopicAnalysis", () => {
     expect(results.map(e => e._id.toString())).toContain(e2._id.toString());
   });
 
-  it("applyTopicAnalysis merges tags into entries", async () => {
+  it("applyTopicAnalysis sets isAnalyzed and increments strength", async () => {
     const s = makeAdapter();
-    const entry = await s.createEntry("user-1", "Python code", makeAnalysis({ tags: ["code"] }));
+    const entry = await s.createEntry("user-1", "Python code", makeAnalysis({ strength: 3 }));
     await s.applyTopicAnalysis({
       topic: "Python",
-      category: "Programming",
       entryIds: [entry._id.toString()],
-      tags: ["python", "programming"],
-      importance: 8,
+      importance: 2,
     });
     const updated = await s.getEntryById(entry._id.toString());
-    expect(updated?.analysis?.tags).toContain("python");
-    expect(updated?.analysis?.tags).toContain("code");
+    expect(updated?.isAnalyzed).toBe(true);
+    expect(updated?.analysis?.strength).toBe(5);
   });
 });
 

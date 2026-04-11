@@ -246,15 +246,9 @@ describe("appendChatMessage", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("findRelevantEntries", () => {
-  it("finds entries matching keywords in tags", async () => {
-    await seedEntry("user-1", "raw text", { tags: ["python", "async"] });
-    await seedEntry("user-1", "other text", { tags: ["java"] });
-    const results = await adapter.findRelevantEntries("user-1", ["python"]);
-    expect(results).toHaveLength(1);
-  });
-
   it("finds entries matching keywords in rawText", async () => {
-    await seedEntry("user-1", "I love Python language", { tags: [] });
+    await seedEntry("user-1", "I love Python language");
+    await seedEntry("user-1", "I love Java language");
     const results = await adapter.findRelevantEntries("user-1", ["Python"]);
     expect(results).toHaveLength(1);
   });

@@ -12,9 +12,7 @@ function makeAdapter() {
 function makeAnalysis(overrides = {}) {
   return {
     summary: "Test summary",
-    tags: ["test"],
     strength: 5,
-    category: "Test",
     isProcessed: true,
     ...overrides,
   };
@@ -163,44 +161,34 @@ describe("applyTopicAnalysis edge cases", () => {
     const s = makeAdapter();
     const count = await s.applyTopicAnalysis({
       topic: "Ghost",
-      category: "Test",
       entryIds: ["nonexistent-id"],
-      tags: ["ghost"],
       importance: 5,
     });
     expect(count).toBe(0);
   });
 
-  it("merges tags without duplicates", async () => {
+  it("increments strength by importance", async () => {
     const s = makeAdapter();
-    const e = await s.createEntry("user-1", "text", makeAnalysis({ tags: ["python", "existing"] }));
+    const e = await s.createEntry("user-1", "text", makeAnalysis({ strength: 3 }));
     await s.applyTopicAnalysis({
       topic: "Python",
-      category: "Programming",
       entryIds: [e._id.toString()],
-      tags: ["python", "new-tag"],
-      importance: 7,
+      importance: 4,
     });
     const updated = await s.getEntryById(e._id.toString());
-    const tags = updated?.analysis?.tags ?? [];
-    const pythonCount = tags.filter(t => t === "python").length;
-    expect(pythonCount).toBe(1);
-    expect(tags).toContain("new-tag");
-    expect(tags).toContain("existing");
+    expect(updated?.analysis?.strength).toBe(7);
   });
 
-  it("handles empty tags array", async () => {
+  it("sets isAnalyzed=true on processed entries", async () => {
     const s = makeAdapter();
-    const e = await s.createEntry("user-1", "text", makeAnalysis({ tags: ["original"] }));
+    const e = await s.createEntry("user-1", "text", makeAnalysis());
     await s.applyTopicAnalysis({
       topic: "T",
-      category: "C",
       entryIds: [e._id.toString()],
-      tags: [],
       importance: 1,
     });
     const updated = await s.getEntryById(e._id.toString());
-    expect(updated?.analysis?.tags).toContain("original");
+    expect(updated?.isAnalyzed).toBe(true);
   });
 });
 
@@ -243,8 +231,8 @@ describe("upsertLTM edge cases", () => {
     const s = makeAdapter();
     const e1 = await s.createEntry("user-1", "A", makeAnalysis({ strength: 10 }));
     const e2 = await s.createEntry("user-1", "B", makeAnalysis({ strength: 10 }));
-    await s.upsertLTM("user-1", "Topic A", "Cat", { summary: "Summary A", tags: ["a"] }, [e1]);
-    await s.upsertLTM("user-1", "Topic B", "Cat", { summary: "Summary B", tags: ["b"] }, [e2]);
+    await s.upsertLTM("user-1", "Topic A", { summary: "Summary A" }, [e1]);
+    await s.upsertLTM("user-1", "Topic B", { summary: "Summary B" }, [e2]);
     const { memories } = await s.getVaultData("user-1");
     expect(memories).toHaveLength(2);
     expect(memories.map(m => m.topic)).toContain("Topic A");
@@ -255,7 +243,7 @@ describe("upsertLTM edge cases", () => {
     const s = makeAdapter();
     const e1 = await s.createEntry("user-1", "source 1", makeAnalysis({ strength: 10 }));
     const e2 = await s.createEntry("user-1", "source 2", makeAnalysis({ strength: 10 }));
-    await s.upsertLTM("user-1", "Topic", "Cat", { summary: "S", tags: [] }, [e1, e2]);
+    await s.upsertLTM("user-1", "Topic", { summary: "S" }, [e1, e2]);
     const { memories } = await s.getVaultData("user-1");
     const ids = memories[0].sourceEntryIds.map(id => id.toString());
     expect(ids).toContain(e1._id.toString());

@@ -290,13 +290,14 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
 
   async applyTopicAnalysis(topic: TopicAnalysis): Promise<number> {
     const stmt = this.db.prepare(
-      "UPDATE vault_entries SET isAnalyzed = 1, updatedAt = ? WHERE id = ?"
+      "UPDATE vault_entries SET isAnalyzed = 1, strength = strength + ?, updatedAt = ? WHERE id = ?"
     );
     const now = new Date().toISOString();
+    const importance = topic.importance ?? 1;
     let updated = 0;
     for (const id of topic.entryIds) {
-      stmt.run(now, id);
-      updated++;
+      const result = stmt.run(importance, now, id) as { changes: number };
+      updated += result.changes;
     }
     return updated;
   }
