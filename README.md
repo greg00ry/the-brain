@@ -15,7 +15,7 @@ Infrastructure for building AI agents with memory — not a wrapper around an AP
 
 The Brain provides:
 - **Hybrid intent routing** — rules + LLM + confidence scoring, works reliably with local or cloud
-- **Biologically-inspired memory** — strength-based decay, synapses, Graph RAG, long-term consolidation
+- **Biologically-inspired memory** — strength-based decay, synapses, Graph RAG
 - **Dynamic action registry** — extensible, DB-backed, build any agent on top
 - **User profile adaptation** — Brain learns your communication style over time
 - **LLM agnostic** — any OpenAI-compatible endpoint, local or cloud
@@ -137,12 +137,11 @@ Legal assistant, trading agent, medical notes, dev assistant — same framework,
 Entry saved (strength=5)
   │
   ├── Conscious processor (LLM-driven, every N saves)
-  │     Analyzes entries → builds synapses → consolidates strong ones to LTM
+  │     Analyzes entries → finds topics → builds synapses between related entries
   │
   └── Subconscious routine (pure math, no LLM)
         Inactive entries lose strength → strength=0 → pruned
         Dead synapses pruned
-        strength ≥ 10 → consolidated to long-term memory
 ```
 
 Entries marked `isPermanent` never decay — use for ingested documents and critical knowledge.
