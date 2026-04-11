@@ -16,12 +16,10 @@ describe("ANALYZE_PROMPT", () => {
     expect(result).toContain("Python is great");
   });
 
-  it("requests summary, tags, strength, category fields", () => {
+  it("requests summary and strength fields", () => {
     const result = ANALYZE_PROMPT("text");
     expect(result).toContain("summary");
-    expect(result).toContain("tags");
     expect(result).toContain("strength");
-    expect(result).toContain("category");
   });
 
   it("instructs to return only valid JSON", () => {
@@ -57,42 +55,41 @@ describe("ANALYZE_PROMPT", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("ANALYZE_WITH_SYNAPSES_PROMPT", () => {
-  it("contains all three inputs", () => {
-    const result = ANALYZE_WITH_SYNAPSES_PROMPT("Tech, Health", "new entry data", "old entry data");
-    expect(result).toContain("Tech, Health");
+  it("contains both inputs", () => {
+    const result = ANALYZE_WITH_SYNAPSES_PROMPT("new entry data", "old entry data");
     expect(result).toContain("new entry data");
     expect(result).toContain("old entry data");
   });
 
   it("requests topics and synapses arrays in JSON", () => {
-    const result = ANALYZE_WITH_SYNAPSES_PROMPT("cat", "delta", "ctx");
+    const result = ANALYZE_WITH_SYNAPSES_PROMPT("delta", "ctx");
     expect(result).toContain("topics");
     expect(result).toContain("synapses");
   });
 
   it("specifies sourceId must come from new entries", () => {
-    const result = ANALYZE_WITH_SYNAPSES_PROMPT("cat", "delta", "ctx");
+    const result = ANALYZE_WITH_SYNAPSES_PROMPT("delta", "ctx");
     expect(result).toContain("sourceId");
     expect(result.toLowerCase()).toContain("new");
   });
 
   it("mentions max 3 synapses per new entry", () => {
-    const result = ANALYZE_WITH_SYNAPSES_PROMPT("cat", "delta", "ctx");
+    const result = ANALYZE_WITH_SYNAPSES_PROMPT("delta", "ctx");
     expect(result).toContain("3");
   });
 
   it("instructs to return only valid JSON", () => {
-    const result = ANALYZE_WITH_SYNAPSES_PROMPT("cat", "delta", "ctx");
+    const result = ANALYZE_WITH_SYNAPSES_PROMPT("delta", "ctx");
     expect(result).toContain("JSON");
   });
 
   it("includes strength scale 1-10", () => {
-    const result = ANALYZE_WITH_SYNAPSES_PROMPT("cat", "delta", "ctx");
+    const result = ANALYZE_WITH_SYNAPSES_PROMPT("delta", "ctx");
     expect(result).toMatch(/1-10|1–10/);
   });
 
   it("works with empty strings", () => {
-    const result = ANALYZE_WITH_SYNAPSES_PROMPT("", "", "");
+    const result = ANALYZE_WITH_SYNAPSES_PROMPT("", "");
     expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
   });
@@ -103,31 +100,29 @@ describe("ANALYZE_WITH_SYNAPSES_PROMPT", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("LONG_TERM_MEMORY_SUMMARY_PROMPT", () => {
-  it("contains topic and category name", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("Machine Learning", "Tech", "entry content here");
+  it("contains topic name", () => {
+    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("Machine Learning", "entry content here");
     expect(result).toContain("Machine Learning");
-    expect(result).toContain("Tech");
   });
 
   it("contains entries content", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "cat", "specific entry data xyz");
+    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "specific entry data xyz");
     expect(result).toContain("specific entry data xyz");
   });
 
-  it("requests JSON with summary and tags", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "cat", "content");
+  it("requests JSON with summary", () => {
+    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "content");
     expect(result).toContain("summary");
-    expect(result).toContain("tags");
     expect(result).toContain("JSON");
   });
 
   it("mentions 300 word limit for summary", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "cat", "content");
+    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "content");
     expect(result).toContain("300");
   });
 
   it("works with empty strings", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("", "", "");
+    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("", "");
     expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
   });

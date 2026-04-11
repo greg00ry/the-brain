@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { runConsciousProcessor } from "../services/brain/conscious.processor.js";
-import { IStorageAdapter, CategoryInfo } from "../adapters/IStorageAdapter.js";
+import { IStorageAdapter } from "../adapters/IStorageAdapter.js";
 import { ILLMAdapter } from "../adapters/ILLMAdapter.js";
 import { IVaultEntry } from "../types/brain.js";
 
@@ -16,25 +16,21 @@ function makeEntry(overrides: Partial<IVaultEntry> = {}): IVaultEntry {
     rawText: "test entry about Python",
     isAnalyzed: true,
     isConsolidated: false,
+    isPermanent: false,
     lastActivityAt: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
-    analysis: { summary: "Python test", tags: ["python"], strength: 5, category: "Tech", isProcessed: true },
+    analysis: { summary: "Python test", strength: 5, isProcessed: true },
     ...overrides,
   };
 }
-
-const CATEGORIES: CategoryInfo[] = [
-  { name: "Tech", description: "Technology topics", keywords: ["python", "code"] },
-  { name: "Science", description: "Science topics", keywords: ["biology", "chemistry"] },
-];
 
 function makeAnalysisResponse(topics: object[], synapses: object[] = []) {
   return JSON.stringify({ topics, synapses });
 }
 
 function makeLTMResponse() {
-  return JSON.stringify({ summary: "Consolidated memory", tags: ["python", "tech"] });
+  return JSON.stringify({ summary: "Consolidated memory" });
 }
 
 function makeLLM(response: string | null = null): ILLMAdapter {
@@ -47,7 +43,6 @@ function makeLLMError(): ILLMAdapter {
 
 function makeStorage(overrides: Partial<IStorageAdapter> = {}): IStorageAdapter {
   return {
-    getCategories: vi.fn().mockResolvedValue(CATEGORIES),
     getUniqueUserIds: vi.fn().mockResolvedValue(["user-1"]),
     findDeltaEntries: vi.fn().mockResolvedValue([]),
     findContextEntries: vi.fn().mockResolvedValue([]),
@@ -61,14 +56,16 @@ function makeStorage(overrides: Partial<IStorageAdapter> = {}): IStorageAdapter 
     getEntryById: vi.fn(),
     getVaultData: vi.fn(),
     deleteVaultEntry: vi.fn(),
-    getUniqueUserIds: vi.fn().mockResolvedValue(["user-1"]),
     getActions: vi.fn(),
     upsertAction: vi.fn(),
+    removeAction: vi.fn(),
     getChatHistory: vi.fn(),
     appendChatMessage: vi.fn(),
     findRelevantEntries: vi.fn(),
     findSimilarEntries: vi.fn(),
     updateEntryEmbedding: vi.fn(),
+    getUserProfile: vi.fn(),
+    upsertUserProfile: vi.fn(),
     getConsolidatedEntryIds: vi.fn(),
     findEntriesToDecay: vi.fn(),
     decayEntries: vi.fn(),
@@ -86,25 +83,6 @@ function makeStorage(overrides: Partial<IStorageAdapter> = {}): IStorageAdapter 
 describe("runConsciousProcessor", () => {
   beforeEach(() => { idCounter = 0; });
 
-  // ─── Early exit: no categories ───────────────────────────────────────────
-
-  it("returns zero stats when no categories exist", async () => {
-    const llm = makeLLM();
-    const storage = makeStorage({ getCategories: vi.fn().mockResolvedValue([]) });
-    const stats = await runConsciousProcessor(llm, storage);
-    expect(stats.analyzed).toBe(0);
-    expect(stats.consolidated).toBe(0);
-    expect(stats.synapsesCreated).toBe(0);
-    expect(llm.complete).not.toHaveBeenCalled();
-  });
-
-  it("does not call getUniqueUserIds when no categories", async () => {
-    const llm = makeLLM();
-    const storage = makeStorage({ getCategories: vi.fn().mockResolvedValue([]) });
-    await runConsciousProcessor(llm, storage);
-    expect(storage.getUniqueUserIds).not.toHaveBeenCalled();
-  });
-
   // ─── No users ────────────────────────────────────────────────────────────
 
   it("returns zero stats when no users exist", async () => {
@@ -121,9 +99,6 @@ describe("runConsciousProcessor", () => {
     const llm = makeLLM();
     const storage = makeStorage({ findDeltaEntries: vi.fn().mockResolvedValue([]) });
     await runConsciousProcessor(llm, storage);
-    // LLM should NOT be called for analysis (no delta), but may be called for LTM
-    const calls = (llm.complete as ReturnType<typeof vi.fn>).mock.calls;
-    // all LLM calls (if any) are for LTM, not analysis
     expect(storage.applyTopicAnalysis).not.toHaveBeenCalled();
   });
 
@@ -140,8 +115,8 @@ describe("runConsciousProcessor", () => {
   it("applies topic analysis for each topic returned by LLM", async () => {
     const entries = [makeEntry()];
     const topics = [
-      { topic: "Python", category: "Tech", entryIds: [entries[0]._id.toString()], tags: ["python"], importance: 8 },
-      { topic: "Testing", category: "Tech", entryIds: [entries[0]._id.toString()], tags: ["test"], importance: 5 },
+      { topic: "Python", entryIds: [entries[0]._id.toString()], importance: 8 },
+      { topic: "Testing", entryIds: [entries[0]._id.toString()], importance: 5 },
     ];
     const llm = makeLLM(makeAnalysisResponse(topics));
     const storage = makeStorage({ findDeltaEntries: vi.fn().mockResolvedValue(entries) });
@@ -152,8 +127,8 @@ describe("runConsciousProcessor", () => {
   it("stats.analyzed sums up counts from applyTopicAnalysis", async () => {
     const entries = [makeEntry()];
     const topics = [
-      { topic: "T1", category: "Tech", entryIds: [], tags: [], importance: 5 },
-      { topic: "T2", category: "Tech", entryIds: [], tags: [], importance: 5 },
+      { topic: "T1", entryIds: [], importance: 5 },
+      { topic: "T2", entryIds: [], importance: 5 },
     ];
     const llm = makeLLM(makeAnalysisResponse(topics));
     const storage = makeStorage({
@@ -232,13 +207,12 @@ describe("runConsciousProcessor", () => {
   });
 
   it("continues to consolidation even if analysis batch fails", async () => {
-    // analysis throws, but consolidation step should still run
     const llm: ILLMAdapter = {
       complete: vi.fn()
         .mockRejectedValueOnce(new Error("analysis failed"))
         .mockResolvedValueOnce(makeLTMResponse()),
     };
-    const strongEntry = makeEntry({ analysis: { summary: "s", tags: ["python"], strength: 10, category: "Tech", isProcessed: true } });
+    const strongEntry = makeEntry({ analysis: { summary: "s", strength: 10, isProcessed: true } });
     const storage = makeStorage({
       findDeltaEntries: vi.fn().mockResolvedValue([makeEntry()]),
       findStrongEntries: vi.fn().mockResolvedValue([strongEntry]),
@@ -249,32 +223,33 @@ describe("runConsciousProcessor", () => {
 
   // ─── Step 2: LTM consolidation ───────────────────────────────────────────
 
-  it("consolidates strong entries by category", async () => {
+  it("consolidates strong entries into LTM with topic 'general'", async () => {
     const strong = [
-      makeEntry({ analysis: { summary: "s", tags: ["python"], strength: 10, category: "Tech", isProcessed: true } }),
-      makeEntry({ analysis: { summary: "s", tags: ["python"], strength: 10, category: "Tech", isProcessed: true } }),
+      makeEntry({ analysis: { summary: "s", strength: 10, isProcessed: true } }),
+      makeEntry({ analysis: { summary: "s", strength: 10, isProcessed: true } }),
     ];
     const llm = makeLLM(makeLTMResponse());
     const storage = makeStorage({ findStrongEntries: vi.fn().mockResolvedValue(strong) });
     const stats = await runConsciousProcessor(llm, storage);
     expect(storage.upsertLTM).toHaveBeenCalledOnce();
+    const [, topicArg] = (storage.upsertLTM as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(topicArg).toBe("general");
     expect(stats.consolidated).toBe(2);
   });
 
-  it("creates separate LTM for each category", async () => {
+  it("all strong entries are consolidated in one LTM call", async () => {
     const strong = [
-      makeEntry({ analysis: { summary: "s", tags: ["python"], strength: 10, category: "Tech", isProcessed: true } }),
-      makeEntry({ analysis: { summary: "s", tags: ["bio"], strength: 10, category: "Science", isProcessed: true } }),
+      makeEntry({ analysis: { summary: "s", strength: 10, isProcessed: true } }),
+      makeEntry({ analysis: { summary: "s", strength: 10, isProcessed: true } }),
     ];
     const llm = makeLLM(makeLTMResponse());
     const storage = makeStorage({ findStrongEntries: vi.fn().mockResolvedValue(strong) });
-    const stats = await runConsciousProcessor(llm, storage);
-    expect(storage.upsertLTM).toHaveBeenCalledTimes(2);
-    expect(stats.consolidated).toBe(2);
+    await runConsciousProcessor(llm, storage);
+    expect(storage.upsertLTM).toHaveBeenCalledTimes(1);
   });
 
   it("calls markConsolidated after successful LTM creation", async () => {
-    const strong = [makeEntry({ analysis: { summary: "s", tags: ["x"], strength: 10, category: "Tech", isProcessed: true } })];
+    const strong = [makeEntry({ analysis: { summary: "s", strength: 10, isProcessed: true } })];
     const llm = makeLLM(makeLTMResponse());
     const storage = makeStorage({ findStrongEntries: vi.fn().mockResolvedValue(strong) });
     await runConsciousProcessor(llm, storage);
@@ -282,33 +257,11 @@ describe("runConsciousProcessor", () => {
   });
 
   it("does not call markConsolidated when LTM creation fails (null response)", async () => {
-    const strong = [makeEntry({ analysis: { summary: "s", tags: ["x"], strength: 10, category: "Tech", isProcessed: true } })];
-    const llm = makeLLM(null); // LLM returns null → createLongTermMemorySummary returns null
+    const strong = [makeEntry({ analysis: { summary: "s", strength: 10, isProcessed: true } })];
+    const llm = makeLLM(null);
     const storage = makeStorage({ findStrongEntries: vi.fn().mockResolvedValue(strong) });
     await runConsciousProcessor(llm, storage);
     expect(storage.markConsolidated).not.toHaveBeenCalled();
-  });
-
-  it("topic name uses top tags joined with ' + '", async () => {
-    const strong = [
-      makeEntry({ analysis: { summary: "s", tags: ["python", "async"], strength: 10, category: "Tech", isProcessed: true } }),
-      makeEntry({ analysis: { summary: "s", tags: ["python", "typing"], strength: 10, category: "Tech", isProcessed: true } }),
-    ];
-    const llm = makeLLM(makeLTMResponse());
-    const storage = makeStorage({ findStrongEntries: vi.fn().mockResolvedValue(strong) });
-    await runConsciousProcessor(llm, storage);
-    const [, topicArg] = (storage.upsertLTM as ReturnType<typeof vi.fn>).mock.calls[0];
-    // "python" appears in both → should be top tag
-    expect(topicArg).toContain("python");
-  });
-
-  it("uses category as topic when no tags exist", async () => {
-    const strong = [makeEntry({ analysis: { summary: "s", tags: [], strength: 10, category: "Tech", isProcessed: true } })];
-    const llm = makeLLM(makeLTMResponse());
-    const storage = makeStorage({ findStrongEntries: vi.fn().mockResolvedValue(strong) });
-    await runConsciousProcessor(llm, storage);
-    const [, topicArg] = (storage.upsertLTM as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(topicArg).toBe("Tech");
   });
 
   // ─── Multiple users ──────────────────────────────────────────────────────
@@ -349,7 +302,7 @@ describe("runConsciousProcessor", () => {
 
   it("returns zero stats on top-level error", async () => {
     const storage = makeStorage({
-      getCategories: vi.fn().mockRejectedValue(new Error("DB crashed")),
+      getUniqueUserIds: vi.fn().mockRejectedValue(new Error("DB crashed")),
     });
     const stats = await runConsciousProcessor(makeLLM(), storage);
     expect(stats.analyzed).toBe(0);

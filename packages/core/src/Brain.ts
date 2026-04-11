@@ -7,18 +7,11 @@ import { getBrainContext } from "./services/ai/intent.context.service.js";
 import { proccessAndStore } from "./services/ingest/ingest.service.js";
 import { runSubconsciousRoutine } from "./services/brain/subconscious.routine.js";
 import { runConsciousProcessor } from "./services/brain/conscious.processor.js";
-import { RESEARCH_ANSWER_PROMPT } from "./services/ai/prompts/research-answer.prompt.js";
-import { SAVE_RESPONSE_PROMPT } from "./services/ai/prompts/save-response.prompt.js";
-import { PERSONALITY_SYSTEM_PROMPT } from "./services/ai/prompts/personality.prompt.js";
 import { USER_PROFILE_PROMPT, buildSystemPrompt } from "./services/ai/prompts/user-profile.prompt.js";
 import { LLM, CHAT, MEMORY, BRAIN } from "./config/constants.js";
 
 export interface BrainConfig {
   systemPrompt?: string;
-  builtInActions?: {
-    SAVE_ONLY?: string;
-    RESEARCH_BRAIN?: string;
-  };
   llm?: {
     responseTemperature?: number;
     responseMaxTokens?: number;
@@ -39,6 +32,10 @@ export interface BrainConfig {
   };
 }
 
+export interface BrainPlugin {
+  register(brain: Brain): Promise<void>;
+}
+
 export type ActionHandler = (
   userId: string,
   text: string,
@@ -53,29 +50,22 @@ export interface ProcessResult {
   entryId?: unknown;
 }
 
-// ─── Built-in handlers ────────────────────────────────────────────────────────
-
-const BUILT_IN_ACTIONS: { name: string; description: string }[] = [
-  { name: "SAVE_ONLY", description: "user states a fact, shares info, opinion, preference, or wants to store something" },
-  { name: "RESEARCH_BRAIN", description: "user explicitly asks a question about past notes, memory, or stored knowledge" },
-];
-
 export class Brain {
   private actionsCache: ActionInfo[] = [];
-  private handlers = new Map<string, ActionHandler>();
+  private readonly handlers = new Map<string, ActionHandler>();
   private saveCount = 0;
   private conversationCount = 0;
-  private readonly _config?: BrainConfig;
-  private readonly cfg: Required<{
+
+  readonly cfg: Required<{
     llm: Required<NonNullable<BrainConfig["llm"]>>;
     memory: Required<NonNullable<BrainConfig["memory"]>>;
     chat: Required<NonNullable<BrainConfig["chat"]>>;
   }>;
 
   constructor(
-    private readonly llm: ILLMAdapter,
-    private readonly storage: IStorageAdapter,
-    private readonly embedding?: IEmbeddingAdapter,
+    public readonly llm: ILLMAdapter,
+    public readonly storage: IStorageAdapter,
+    public readonly embedding?: IEmbeddingAdapter,
     config?: BrainConfig,
   ) {
     this.cfg = {
@@ -98,53 +88,19 @@ export class Brain {
         profileUpdateEveryN: config?.chat?.profileUpdateEveryN ?? CHAT.PROFILE_UPDATE_EVERY_N,
       },
     };
-    this._config = config;
-    const basePersonality = config?.systemPrompt ?? PERSONALITY_SYSTEM_PROMPT;
+  }
 
-    this.handlers.set("RESEARCH_BRAIN", async (userId, text, { relevantEntries, hasContext }, _llm, chatHistory) => {
-      const userProfile = await this.storage.getUserProfile(userId);
-      const systemPrompt = buildSystemPrompt(basePersonality, userProfile);
+  // ─── Plugins ──────────────────────────────────────────────────────────────
 
-      const maxCharsPerEntry = this.cfg.memory.contextMaxCharsPerEntry ?? 1200;
-      const fullContext = relevantEntries
-        .map((e, i) => `[${i + 1}] ${e.rawText.substring(0, maxCharsPerEntry)}`)
-        .join('\n\n---\n\n');
-
-      const prompt = hasContext
-        ? RESEARCH_ANSWER_PROMPT(text, fullContext, chatHistory)
-        : `The user asked: "${text}"\n\nYou don't have anything stored about this yet. Let them know and ask if they want to tell you more.`;
-
-      const answer = await this.llm.complete({
-        systemPrompt,
-        userPrompt: prompt,
-        temperature: this.cfg.llm.responseTemperature,
-        maxTokens: this.cfg.llm.responseMaxTokens,
-      });
-      return answer ?? "Coś poszło nie tak z generowaniem odpowiedzi.";
-    });
-
-    this.handlers.set("SAVE_ONLY", async (userId, text, _context, _llm, chatHistory) => {
-      const userProfile = await this.storage.getUserProfile(userId);
-      const systemPrompt = buildSystemPrompt(basePersonality, userProfile);
-
-      const answer = await this.llm.complete({
-        systemPrompt,
-        userPrompt: SAVE_RESPONSE_PROMPT(text, chatHistory),
-        temperature: this.cfg.llm.saveTemperature,
-        maxTokens: this.cfg.llm.saveMaxTokens,
-      });
-      return answer ?? "Zapisałem to.";
-    });
+  async use(...plugins: BrainPlugin[]): Promise<void> {
+    for (const plugin of plugins) {
+      await plugin.register(this);
+    }
   }
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   async loadActions(): Promise<void> {
-    // Seed built-in actions if not present
-    for (const action of BUILT_IN_ACTIONS) {
-      const description = this._config?.builtInActions?.[action.name as keyof NonNullable<BrainConfig["builtInActions"]>] ?? action.description;
-      await this.storage.upsertAction(action.name, description, true);
-    }
     this.actionsCache = await this.storage.getActions();
   }
 
@@ -163,13 +119,10 @@ export class Brain {
   // ─── Process ──────────────────────────────────────────────────────────────
 
   async process(userId: string, text: string): Promise<ProcessResult> {
-    const actions = this.actionsCache.length > 0 ? this.actionsCache : BUILT_IN_ACTIONS;
+    const actions = this.actionsCache;
 
-    // Load persistent chat history from DB
     const chatHistory = await this.storage.getChatHistory(userId);
-
     const intent = await classifyIntent({ userText: text, chatHistory, actions }, this.llm);
-
     const context = await getBrainContext(userId, text, this.storage, this.embedding, this.cfg.memory);
 
     const handler = this.handlers.get(intent.action);
@@ -183,17 +136,14 @@ export class Brain {
       const entry = await proccessAndStore(userId, text, this.llm, this.storage, this.embedding);
       answer = await handler(userId, text, context, this.llm, chatHistory);
 
-      // Trigger maintenance every N saves (fire and forget)
       this.saveCount++;
       if (this.saveCount % this.cfg.chat.maintenanceEveryN === 0) {
         this.runMaintenance().catch(err => console.error('[Brain] Maintenance error:', err));
       }
 
-      // Persist chat history
       await this.storage.appendChatMessage(userId, "user", text, this.cfg.chat.historyMaxStored);
       await this.storage.appendChatMessage(userId, "assistant", answer, this.cfg.chat.historyMaxStored);
 
-      // Update user profile every N conversations (fire and forget)
       this.conversationCount++;
       if (this.conversationCount % this.cfg.chat.profileUpdateEveryN === 0) {
         this.updateUserProfile(userId, chatHistory).catch(err =>
@@ -209,7 +159,6 @@ export class Brain {
     await this.storage.appendChatMessage(userId, "user", text, this.cfg.chat.historyMaxStored);
     await this.storage.appendChatMessage(userId, "assistant", answer, this.cfg.chat.historyMaxStored);
 
-    // Update user profile every N conversations (fire and forget)
     this.conversationCount++;
     if (this.conversationCount % this.cfg.chat.profileUpdateEveryN === 0) {
       this.updateUserProfile(userId, chatHistory).catch(err =>

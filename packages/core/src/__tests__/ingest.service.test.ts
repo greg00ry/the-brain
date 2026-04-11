@@ -19,9 +19,7 @@ function makeLLMError(): ILLMAdapter {
 function llmAnalysis(overrides = {}) {
   return JSON.stringify({
     summary: "Test summary",
-    tags: ["python", "test"],
     strength: 7,
-    category: "Tech",
     ...overrides,
   });
 }
@@ -36,7 +34,7 @@ function makeEntry(id = "entry-1"): IVaultEntry {
     lastActivityAt: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
-    analysis: { summary: "s", tags: [], strength: 5, category: "Tech", isProcessed: true },
+    analysis: { summary: "s", strength: 5, isProcessed: true },
   };
 }
 
@@ -46,7 +44,7 @@ function makeStorage(entry = makeEntry()): IStorageAdapter {
     updateEntryEmbedding: vi.fn().mockResolvedValue(undefined),
     // unused
     getEntryById: vi.fn(), getVaultData: vi.fn(), deleteVaultEntry: vi.fn(),
-    getCategories: vi.fn(), getUniqueUserIds: vi.fn(), getActions: vi.fn(),
+    getUniqueUserIds: vi.fn(), getActions: vi.fn(),
     upsertAction: vi.fn(), getChatHistory: vi.fn(), appendChatMessage: vi.fn(),
     findRelevantEntries: vi.fn(), findSimilarEntries: vi.fn(),
     findDeltaEntries: vi.fn(), findContextEntries: vi.fn(),
@@ -71,9 +69,7 @@ describe("analyzeTextWithAI", () => {
     const llm = makeLLM(llmAnalysis());
     const result = await analyzeTextWithAI("python tips", llm);
     expect(result.summary).toBe("Test summary");
-    expect(result.tags).toEqual(["python", "test"]);
     expect(result.strength).toBe(7);
-    expect(result.category).toBe("Tech");
     expect(result.isProcessed).toBe(true);
   });
 
@@ -87,9 +83,7 @@ describe("analyzeTextWithAI", () => {
   it("returns FALLBACK when LLM returns null", async () => {
     const result = await analyzeTextWithAI("hello world", makeLLM(null));
     expect(result.isProcessed).toBe(false);
-    expect(result.tags).toEqual(["unprocessed"]);
     expect(result.strength).toBe(5);
-    expect(result.category).toBe("Uncategorized");
   });
 
   it("FALLBACK summary is full text when shorter than 100 chars", async () => {
@@ -116,7 +110,6 @@ describe("analyzeTextWithAI", () => {
   it("returns FALLBACK when LLM returns invalid JSON", async () => {
     const result = await analyzeTextWithAI("text", makeLLM("not json"));
     expect(result.isProcessed).toBe(false);
-    expect(result.tags).toEqual(["unprocessed"]);
   });
 
   it("returns FALLBACK when LLM returns empty string", async () => {
@@ -130,59 +123,39 @@ describe("analyzeTextWithAI", () => {
   it("returns FALLBACK when LLM throws — consistent with embedding non-fatal behaviour", async () => {
     const result = await analyzeTextWithAI("text", makeLLMError());
     expect(result.isProcessed).toBe(false);
-    expect(result.tags).toEqual(["unprocessed"]);
   });
 
   // ─── Missing fields in LLM response ──────────────────────────────────────
 
   it("missing summary falls back to truncate(text) — same 100-char limit as FALLBACK", async () => {
     const text = "x".repeat(150);
-    const llm = makeLLM(JSON.stringify({ tags: [], strength: 5, category: "Tech" }));
+    const llm = makeLLM(JSON.stringify({ strength: 5 }));
     const result = await analyzeTextWithAI(text, llm);
     expect(result.summary).toBe("x".repeat(100) + "...");
     expect(result.isProcessed).toBe(true);
   });
 
-  it("missing tags defaults to empty array", async () => {
-    const llm = makeLLM(JSON.stringify({ summary: "s", strength: 5, category: "Tech" }));
-    const result = await analyzeTextWithAI("text", llm);
-    expect(result.tags).toEqual([]);
-  });
-
-  it("tags not an array defaults to empty array", async () => {
-    const llm = makeLLM(JSON.stringify({ summary: "s", tags: "python", strength: 5, category: "Tech" }));
-    const result = await analyzeTextWithAI("text", llm);
-    expect(result.tags).toEqual([]);
-  });
-
-  it("missing category defaults to 'Other'", async () => {
-    const llm = makeLLM(JSON.stringify({ summary: "s", tags: [], strength: 5 }));
-    const result = await analyzeTextWithAI("text", llm);
-    expect(result.category).toBe("Other");
-  });
-
   it("missing strength defaults to 0", async () => {
-    const llm = makeLLM(JSON.stringify({ summary: "s", tags: [], category: "Tech" }));
+    const llm = makeLLM(JSON.stringify({ summary: "s" }));
     const result = await analyzeTextWithAI("text", llm);
     expect(result.strength).toBe(0);
   });
 
   it("strength as string '8' is coerced to number 8", async () => {
-    const llm = makeLLM(JSON.stringify({ summary: "s", tags: [], strength: "8", category: "Tech" }));
+    const llm = makeLLM(JSON.stringify({ summary: "s", strength: "8" }));
     const result = await analyzeTextWithAI("text", llm);
     expect(result.strength).toBe(8);
   });
 
   it("strength as non-numeric string defaults to 0", async () => {
-    const llm = makeLLM(JSON.stringify({ summary: "s", tags: [], strength: "high", category: "Tech" }));
+    const llm = makeLLM(JSON.stringify({ summary: "s", strength: "high" }));
     const result = await analyzeTextWithAI("text", llm);
     expect(result.strength).toBe(0);
   });
 
   it("strength=0 from LLM is returned as 0 (not overridden)", async () => {
-    const llm = makeLLM(JSON.stringify({ summary: "s", tags: [], strength: 0, category: "Tech" }));
+    const llm = makeLLM(JSON.stringify({ summary: "s", strength: 0 }));
     const result = await analyzeTextWithAI("text", llm);
-    // Number(0) || 0 = 0 — correct, not lost
     expect(result.strength).toBe(0);
   });
 
@@ -321,7 +294,6 @@ describe("proccessAndStore", () => {
     expect(storage.createEntry).toHaveBeenCalled();
     const analysis = (storage.createEntry as ReturnType<typeof vi.fn>).mock.calls[0][2];
     expect(analysis.isProcessed).toBe(false);
-    expect(analysis.tags).toEqual(["unprocessed"]);
   });
 
   it("propagates createEntry error", async () => {
@@ -339,6 +311,5 @@ describe("proccessAndStore", () => {
     await proccessAndStore(USER, TEXT, makeLLM(null), storage);
     const analysis = (storage.createEntry as ReturnType<typeof vi.fn>).mock.calls[0][2];
     expect(analysis.isProcessed).toBe(false);
-    expect(analysis.tags).toEqual(["unprocessed"]);
   });
 });

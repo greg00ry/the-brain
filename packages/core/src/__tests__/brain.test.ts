@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Brain } from "../Brain.js";
+import { SavingPlugin } from "../plugins/SavingPlugin.js";
+import { MemoryPlugin } from "../plugins/MemoryPlugin.js";
 import type { ILLMAdapter, LLMRequest } from "../adapters/ILLMAdapter.js";
 import type { IStorageAdapter } from "../adapters/IStorageAdapter.js";
 
@@ -9,9 +11,8 @@ function makeMockStorage(): IStorageAdapter {
   return {
     createEntry: vi.fn().mockResolvedValue({ _id: "entry-1", rawText: "test", strength: 5 }),
     getEntryById: vi.fn().mockResolvedValue(null),
-    getVaultData: vi.fn().mockResolvedValue({ entries: [], memories: [], categories: [] }),
+    getVaultData: vi.fn().mockResolvedValue({ entries: [], memories: [] }),
     deleteVaultEntry: vi.fn().mockResolvedValue(null),
-    getCategories: vi.fn().mockResolvedValue([]),
     getUniqueUserIds: vi.fn().mockResolvedValue([]),
     getActions: vi.fn().mockResolvedValue([
       { name: "RESEARCH_BRAIN", description: "user asks about memory" },
@@ -40,6 +41,7 @@ function makeMockStorage(): IStorageAdapter {
     pruneDeadSynapses: vi.fn().mockResolvedValue(0),
     findEntriesReadyForLTM: vi.fn().mockResolvedValue([]),
     countEntries: vi.fn().mockResolvedValue(0),
+    removeAction: vi.fn().mockResolvedValue(undefined),
   } as unknown as IStorageAdapter;
 }
 
@@ -59,7 +61,7 @@ describe("Brain", () => {
         }
         // Analyze text — prompt contains "Analyze the following text"
         if (req.userPrompt?.includes("Analyze the following text")) {
-          return Promise.resolve('{"summary":"test note","tags":["test"],"strength":5,"category":"general"}');
+          return Promise.resolve('{"summary":"test note","strength":5}');
         }
         // Personality response (SAVE_ONLY handler)
         return Promise.resolve("Ciekawe! Opowiedz mi więcej.");
@@ -67,12 +69,12 @@ describe("Brain", () => {
     };
     storage = makeMockStorage();
     brain = new Brain(llm, storage);
-    await brain.loadActions();
+    await brain.use(new SavingPlugin(), new MemoryPlugin());
   });
 
-  it("loadActions seeds built-in actions", async () => {
-    expect(storage.upsertAction).toHaveBeenCalledWith("RESEARCH_BRAIN", expect.any(String), true);
-    expect(storage.upsertAction).toHaveBeenCalledWith("SAVE_ONLY", expect.any(String), true);
+  it("loadActions loads actions from storage", async () => {
+    await brain.loadActions();
+    expect(storage.getActions).toHaveBeenCalled();
   });
 
   it("process SAVE_ONLY returns answer and entryId", async () => {
@@ -146,7 +148,7 @@ describe("Brain", () => {
   it("SAVE_ONLY returns fallback answer when LLM returns null", async () => {
     (llm.complete as ReturnType<typeof vi.fn>).mockImplementation((req: LLMRequest) => {
       if (req.userPrompt?.includes("### ROLE")) return Promise.resolve('{"action":"SAVE_ONLY","confidence":90,"reasoning":"save"}');
-      if (req.userPrompt?.includes("Analyze the following text")) return Promise.resolve('{"summary":"s","tags":[],"strength":5,"category":"Tech"}');
+      if (req.userPrompt?.includes("Analyze the following text")) return Promise.resolve('{"summary":"s","strength":5}');
       return Promise.resolve(null); // SAVE_ONLY handler gets null
     });
     const result = await brain.process("user-1", "some fact");
@@ -170,12 +172,10 @@ describe("Brain", () => {
     (storage.findRelevantEntries as ReturnType<typeof vi.fn>).mockResolvedValue([]);
     (llm.complete as ReturnType<typeof vi.fn>).mockImplementation((req: LLMRequest) => {
       if (req.userPrompt?.includes("### ROLE")) return Promise.resolve('{"action":"RESEARCH_BRAIN","confidence":92,"reasoning":"recall"}');
-      // capture what prompt was used
       return Promise.resolve("I don't know yet");
     });
     const result = await brain.process("user-1", "co wiem o kwantach?");
     expect(result.answer).toBe("I don't know yet");
-    // the no-context prompt contains this phrase
     const calls = (llm.complete as ReturnType<typeof vi.fn>).mock.calls;
     const researchCall = calls.find(c => c[0].userPrompt?.includes("don't have anything stored"));
     expect(researchCall).toBeDefined();
@@ -264,11 +264,9 @@ describe("Brain", () => {
 
   it("runMaintenance calls subconscious and conscious processors", async () => {
     await brain.runMaintenance();
-    // subconscious calls these
     expect(storage.getConsolidatedEntryIds).toHaveBeenCalled();
     expect(storage.pruneDeadEntries).toHaveBeenCalled();
-    // conscious calls these
-    expect(storage.getCategories).toHaveBeenCalled();
+    expect(storage.getUniqueUserIds).toHaveBeenCalled();
   });
 
   // ─── Maintenance triggered every MAINTENANCE_EVERY_N saves ───────────────
@@ -300,13 +298,14 @@ describe("Brain", () => {
     expect(maintenanceSpy).not.toHaveBeenCalled();
   });
 
-  // ─── process() uses actionsCache when loaded ─────────────────────────────
+  // ─── process() with empty actionsCache ───────────────────────────────────
 
-  it("process uses BUILT_IN_ACTIONS when actionsCache is empty (no loadActions called)", async () => {
+  it("process falls back to SAVE_ONLY when actionsCache is empty", async () => {
     const freshBrain = new Brain(llm, storage);
-    // no loadActions — actionsCache is empty → falls back to BUILT_IN_ACTIONS
+    // no use() called — actionsCache empty → classifyIntent returns default fallback
     const result = await freshBrain.process("user-1", "save this fact");
-    expect(["SAVE_ONLY", "RESEARCH_BRAIN"]).toContain(result.action);
+    // handler not registered so answer is error message, but action should be SAVE_ONLY (default fallback)
+    expect(result.action).toBe("SAVE_ONLY");
   });
 
   it("process passes chat history from storage to classifyIntent", async () => {
@@ -318,11 +317,9 @@ describe("Brain", () => {
 
     await brain.process("user-1", "follow up");
 
-    // LLM is called for intent classification — check that prompt contains history
     const intentCall = (llm.complete as ReturnType<typeof vi.fn>).mock.calls
       .find(c => c[0].userPrompt?.includes("### ROLE"));
     expect(intentCall).toBeDefined();
-    // The prompt is built with chat history included
     expect(intentCall![0].userPrompt).toContain("earlier message");
   });
 });

@@ -1,6 +1,10 @@
 // ─── Main class ───────────────────────────────────────────────────────────────
 export { Brain } from "./Brain.js";
-export type { ActionHandler, ProcessResult, BrainConfig } from "./Brain.js";
+export type { ActionHandler, ProcessResult, BrainConfig, BrainPlugin } from "./Brain.js";
+
+// ─── Built-in plugins ─────────────────────────────────────────────────────────
+export { MemoryPlugin } from "./plugins/MemoryPlugin.js";
+export { SavingPlugin } from "./plugins/SavingPlugin.js";
 
 // ─── Adapter interfaces ───────────────────────────────────────────────────────
 export type { ILLMAdapter, LLMRequest } from "./adapters/ILLMAdapter.js";
