@@ -275,6 +275,14 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
     return updated;
   }
 
+  async markEntriesAnalyzed(entryIds: string[]): Promise<void> {
+    const stmt = this.db.prepare("UPDATE vault_entries SET isAnalyzed = 1, updatedAt = ? WHERE id = ?");
+    const now = new Date().toISOString();
+    for (const id of entryIds) {
+      stmt.run(now, id);
+    }
+  }
+
   // ─── Synapse Queries & Management ────────────────────────────────────────
 
   async getSynapsesBySource(entryId: string, limit: number): Promise<{ targetId: string; weight: number; reason: string; targetSummary?: string; targetRawText?: string }[]> {
@@ -299,6 +307,7 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
   async processSynapseLinks(synapses: { sourceId: string; targetId: string; reason: string; strength: number }[], deltaEntryIds: Set<string>): Promise<number> {
     const now = new Date().toISOString();
     let created = 0;
+    const getPermFlag = this.db.prepare("SELECT isPermanent FROM vault_entries WHERE id = ?");
     const upsert = this.db.prepare(`
       INSERT INTO synapses (id, sourceId, targetId, weight, reason, createdAt)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -307,6 +316,9 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
     for (const s of synapses) {
       if (s.sourceId === s.targetId) continue;
       if (!deltaEntryIds.has(s.sourceId) && !deltaEntryIds.has(s.targetId)) continue;
+      const src = getPermFlag.get(s.sourceId) as { isPermanent: number } | undefined;
+      const tgt = getPermFlag.get(s.targetId) as { isPermanent: number } | undefined;
+      if (src?.isPermanent && tgt?.isPermanent) continue;
       upsert.run(uid(), s.sourceId, s.targetId, s.strength, s.reason, now);
       created++;
     }

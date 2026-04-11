@@ -8,10 +8,8 @@ Adapter który automatycznie przełącza między lokalnym LLM a cloud.
 - użytkownik dostaje prywatność gdzie się da, cloud gdzie musi
 
 ## Znane błędy do naprawy
-- Warning w konsoli gdy brak embedding adaptera (zamiast cichego fallbacku na keyword search)
-- Retrieval używa `summary` zamiast `rawText` w kontekście — model halucynuje artykuły
+- ~~Warning w konsoli gdy brak embedding adaptera~~ ✅ DONE — warning jest w `intent.context.service.ts`
 - Klasyfikacja intencji zawodna bez embeddingów
-- Przetestować `builtInActions` override w praktyce
 
 ## Intent Points + Embeddings
 Pomysł na poprawę klasyfikacji intencji:
@@ -19,6 +17,9 @@ Pomysł na poprawę klasyfikacji intencji:
 - embeddingi do porównania wiadomości użytkownika z punktami
 - nie rozwiązuje hardcoded rozwiązań ale poprawia routing
 - do przemyślenia jak połączyć z obecnym rule engine
+
+## FileAdapter — zrezygnowano
+SQLite już spełnia tę rolę: zero deps, single file, zero config. FileAdapter nie wnosi wartości.
 
 ## Tagi — usunąć ✅ DONE (0.2.10)
 - Ten sam problem co kategorie: model generuje co chce, brak spójności
@@ -56,8 +57,8 @@ Mały model (1-3B) wytrenowany tylko na klasyfikacji intencji:
 **Fine-tuning:**
 - baza: llama3.2 3B lub phi-3 mini
 - dane: ~1000 przykładów (intent → JSON)
-- narzędzia: `unsloth` (2x szybszy fine-tuning), `llama.cpp` (konwersja do GGUF)
-- koszt: kilka dolarów na RunPod/Colab
+- narzędzia: `mlx-lm` (Apple M1/M2/M3, natywne), `llama.cpp` (konwersja do GGUF), `unsloth` (CUDA — RunPod/Colab)
+- koszt lokalnie: 0 zł (M1 16GB wystarczy na 1-3B); na GPU cloud: kilka dolarów
 
 **Deploy:**
 - Hugging Face Hub jako publiczne repo modelu

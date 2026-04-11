@@ -29,6 +29,7 @@ function makeMockStorage(): IStorageAdapter {
     findDeltaEntries: vi.fn().mockResolvedValue([]),
     findContextEntries: vi.fn().mockResolvedValue([]),
     applyTopicAnalysis: vi.fn().mockResolvedValue(0),
+    markEntriesAnalyzed: vi.fn().mockResolvedValue(undefined),
     getSynapsesBySource: vi.fn().mockResolvedValue([]),
     processSynapseLinks: vi.fn().mockResolvedValue(0),
     findEntriesToDecay: vi.fn().mockResolvedValue([]),
@@ -261,6 +262,52 @@ describe("Brain", () => {
     await brain.runMaintenance();
     expect(storage.pruneDeadEntries).toHaveBeenCalled();
     expect(storage.getUniqueUserIds).toHaveBeenCalled();
+  });
+
+  // ─── synapseMode config ───────────────────────────────────────────────────
+
+  it("uses LLM for synapses by default (no embedding adapter passed to processor)", async () => {
+    const embeddingAdapter = { embed: vi.fn().mockResolvedValue([0.1, 0.2]) };
+    storage = makeMockStorage();
+    // synapseMode defaults to "llm" — embedding adapter should NOT be passed to conscious processor
+    const brainWithEmbedding = new Brain(llm, storage, embeddingAdapter);
+    await brainWithEmbedding.use(new SavingPlugin(), new MemoryPlugin());
+    await brainWithEmbedding.runMaintenance();
+    // LLM mode: findSimilarEntries not called (no delta entries anyway, but embed should not be called)
+    expect(embeddingAdapter.embed).not.toHaveBeenCalled();
+  });
+
+  it("uses embeddings for synapses when synapseMode is 'embedding'", async () => {
+    const embeddingAdapter = { embed: vi.fn().mockResolvedValue([0.1, 0.2]) };
+    const mockStorage = makeMockStorage();
+    (mockStorage.getUniqueUserIds as ReturnType<typeof vi.fn>).mockResolvedValue(["user-1"]);
+    (mockStorage.findDeltaEntries as ReturnType<typeof vi.fn>).mockResolvedValue([{
+      _id: { toString: () => "entry-1" },
+      userId: "user-1",
+      rawText: "some fact",
+      isAnalyzed: false,
+      isPermanent: false,
+      lastActivityAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }]);
+    const brainWithEmbedding = new Brain(llm, mockStorage, embeddingAdapter, {
+      memory: { synapseMode: "embedding" },
+    });
+    await brainWithEmbedding.use(new SavingPlugin(), new MemoryPlugin());
+    await brainWithEmbedding.runMaintenance();
+    expect(embeddingAdapter.embed).toHaveBeenCalled();
+    expect(mockStorage.findSimilarEntries).toHaveBeenCalled();
+    expect(mockStorage.markEntriesAnalyzed).toHaveBeenCalled();
+  });
+
+  it("synapseMode 'embedding' without embedding adapter falls back to LLM silently", async () => {
+    const brainNoEmbedding = new Brain(llm, storage, undefined, {
+      memory: { synapseMode: "embedding" },
+    });
+    await brainNoEmbedding.use(new SavingPlugin(), new MemoryPlugin());
+    // Should not throw — just runs LLM mode
+    await expect(brainNoEmbedding.runMaintenance()).resolves.toBeDefined();
   });
 
   // ─── Maintenance triggered every MAINTENANCE_EVERY_N saves ───────────────

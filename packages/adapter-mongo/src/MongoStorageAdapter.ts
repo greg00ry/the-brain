@@ -225,8 +225,13 @@ export class MongoStorageAdapter implements IStorageAdapter {
   ): Promise<number> {
     let createdCount = 0;
 
+    const allIds = [...new Set(synapses.flatMap(s => [s.sourceId, s.targetId]))];
+    const permEntries = await VaultEntry.find({ _id: { $in: allIds }, isPermanent: true }).select("_id").lean();
+    const permSet = new Set(permEntries.map((e: { _id: unknown }) => e._id!.toString()));
+
     const synapsesBySource = new Map<string, typeof synapses>();
     for (const synapse of synapses) {
+      if (permSet.has(synapse.sourceId) && permSet.has(synapse.targetId)) continue;
       if (!synapsesBySource.has(synapse.sourceId)) {
         synapsesBySource.set(synapse.sourceId, []);
       }
@@ -294,6 +299,14 @@ export class MongoStorageAdapter implements IStorageAdapter {
     if (ops.length === 0) return 0;
     await VaultEntry.bulkWrite(ops);
     return ops.length;
+  }
+
+  async markEntriesAnalyzed(entryIds: string[]): Promise<void> {
+    if (entryIds.length === 0) return;
+    await VaultEntry.updateMany(
+      { _id: { $in: entryIds.map(id => new mongoose.Types.ObjectId(id)) } },
+      { $set: { isAnalyzed: true } },
+    );
   }
 
   // ─── Subconscious Routine ─────────────────────────────────────────────────

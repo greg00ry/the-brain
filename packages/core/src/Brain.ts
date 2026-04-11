@@ -24,6 +24,7 @@ export interface BrainConfig {
     contextTopEntries?: number;
     contextMaxCharsPerEntry?: number;
     decayWindowMs?: number;
+    synapseMode?: "embedding" | "llm"; // default: "llm"
   };
   chat?: {
     historyMaxStored?: number;
@@ -81,6 +82,7 @@ export class Brain {
         contextTopEntries: config?.memory?.contextTopEntries ?? MEMORY.CONTEXT_TOP_ENTRIES,
         contextMaxCharsPerEntry: config?.memory?.contextMaxCharsPerEntry ?? MEMORY.CONTEXT_MAX_CHARS_PER_ENTRY,
         decayWindowMs: config?.memory?.decayWindowMs ?? BRAIN.DECAY_WINDOW_MS,
+        synapseMode: config?.memory?.synapseMode ?? "llm",
       },
       chat: {
         historyMaxStored: config?.chat?.historyMaxStored ?? CHAT.HISTORY_MAX_STORED,
@@ -203,7 +205,8 @@ export class Brain {
 
   async runMaintenance() {
     const subStats = await runSubconsciousRoutine(this.storage, this.cfg.memory.decayWindowMs);
-    const consciousStats = await runConsciousProcessor(this.llm, this.storage);
+    const embeddingForSynapses = this.cfg.memory.synapseMode === "embedding" ? this.embedding : undefined;
+    const consciousStats = await runConsciousProcessor(this.llm, this.storage, embeddingForSynapses);
     return { subStats, consciousStats };
   }
 }

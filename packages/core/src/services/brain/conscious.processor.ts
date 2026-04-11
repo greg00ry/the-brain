@@ -1,10 +1,11 @@
 import { IVaultEntry } from "../../types/brain.js";
 import { ILLMAdapter } from "../../adapters/ILLMAdapter.js";
+import { IEmbeddingAdapter } from "../../adapters/IEmbeddingAdapter.js";
 import { cleanAndParseJSON } from "../../utils/json.js";
 import { IStorageAdapter } from "../../adapters/IStorageAdapter.js";
 import { TopicAnalysis } from "../../types/brain.js";
 import { ANALYZE_WITH_SYNAPSES_PROMPT } from "../ai/prompts/analyze-with-synapses.prompt.js";
-import { BRAIN, LLM } from "../../config/constants.js";
+import { BRAIN, LLM, MEMORY } from "../../config/constants.js";
 
 // ============================================================================
 // CONSCIOUS PROCESSOR - AI-DRIVEN, DELTA ONLY
@@ -14,7 +15,7 @@ interface SynapseLink {
   sourceId: string;
   targetId: string;
   reason: string;
-  strength: number; // 1-10 how strong the connection is
+  strength: number;
 }
 
 interface AnalysisResult {
@@ -27,10 +28,30 @@ export interface ConsciousStats {
   synapsesCreated: number;
 }
 
-/**
- * Analyze delta entries AND find connections to existing entries.
- * Returns both topic analysis and synapse recommendations.
- */
+// ─── Embedding-based synapse creation ────────────────────────────────────────
+
+async function buildSynapsesFromEmbeddings(
+  entry: IVaultEntry,
+  storage: IStorageAdapter,
+  embedding: IEmbeddingAdapter,
+): Promise<SynapseLink[]> {
+  const vector = entry.embedding ?? await embedding.embed(entry.rawText);
+
+  const similar = await storage.findSimilarEntries(entry.userId, vector, MEMORY.SYNAPSE_BRANCH_FACTOR + 1);
+
+  return similar
+    .filter(e => e._id.toString() !== entry._id.toString())
+    .slice(0, MEMORY.SYNAPSE_BRANCH_FACTOR)
+    .map(e => ({
+      sourceId: entry._id.toString(),
+      targetId: e._id.toString(),
+      reason: "semantic similarity",
+      strength: 7, // fixed — cosine similarity not exposed from findSimilarEntries
+    }));
+}
+
+// ─── LLM-based synapse creation (fallback) ───────────────────────────────────
+
 async function analyzeWithSynapses(
   deltaEntries: IVaultEntry[],
   contextEntries: IVaultEntry[],
@@ -78,11 +99,15 @@ async function analyzeWithSynapses(
   }
 }
 
-/**
- * Conscious processor - AI-driven, processes only DELTA entries.
- */
-export async function runConsciousProcessor(llm: ILLMAdapter, storage: IStorageAdapter): Promise<ConsciousStats> {
-  console.log('\n👁️ [Świadomość] Uruchamiam świadomy procesor...');
+// ─── Main processor ──────────────────────────────────────────────────────────
+
+export async function runConsciousProcessor(
+  llm: ILLMAdapter,
+  storage: IStorageAdapter,
+  embedding?: IEmbeddingAdapter,
+): Promise<ConsciousStats> {
+  const mode = embedding ? "embedding" : "llm";
+  console.log(`\n👁️ [Świadomość] Uruchamiam świadomy procesor... (tryb: ${mode})`);
   const startTime = Date.now();
 
   const stats: ConsciousStats = {
@@ -107,25 +132,43 @@ export async function runConsciousProcessor(llm: ILLMAdapter, storage: IStorageA
 
       console.log(`👁️ [Świadomość]    Delta: ${deltaEntries.length} wpisów do analizy`);
 
-      for (let i = 0; i < deltaEntries.length; i += BRAIN.BATCH_SIZE) {
-        const currentBatch = deltaEntries.slice(i, i + BRAIN.BATCH_SIZE);
-        console.log(`🧠 [Batch] Przetwarzam paczkę ${Math.floor(i / BRAIN.BATCH_SIZE) + 1} (${currentBatch.length} wpisów)...`);
+      if (embedding) {
+        // ── Embedding mode ──────────────────────────────────────────────────
+        for (const entry of deltaEntries) {
+          const synapses = await buildSynapsesFromEmbeddings(entry, storage, embedding);
 
-        const deltaIds = currentBatch.map(e => e._id.toString());
-        const contextEntries = await storage.findContextEntries(userId, deltaIds);
-
-        const { topics, synapses } = await analyzeWithSynapses(currentBatch, contextEntries, llm);
-        console.log(`👁️ [Batch] Zidentyfikowano ${topics.length} tematów, ${synapses.length} połączeń`);
-
-        for (const topic of topics) {
-          const count = await storage.applyTopicAnalysis(topic);
-          stats.analyzed += count;
+          if (synapses.length > 0) {
+            const deltaIdSet = new Set([entry._id.toString()]);
+            const created = await storage.processSynapseLinks(synapses, deltaIdSet);
+            stats.synapsesCreated += created;
+          }
         }
 
-        if (synapses.length > 0) {
-          const deltaIdSet = new Set(deltaIds);
-          const synapsesCreated = await storage.processSynapseLinks(synapses, deltaIdSet);
-          stats.synapsesCreated += synapsesCreated;
+        await storage.markEntriesAnalyzed(deltaEntries.map(e => e._id.toString()));
+        stats.analyzed += deltaEntries.length;
+
+      } else {
+        // ── LLM mode (fallback) ─────────────────────────────────────────────
+        for (let i = 0; i < deltaEntries.length; i += BRAIN.BATCH_SIZE) {
+          const currentBatch = deltaEntries.slice(i, i + BRAIN.BATCH_SIZE);
+          console.log(`🧠 [Batch] Przetwarzam paczkę ${Math.floor(i / BRAIN.BATCH_SIZE) + 1} (${currentBatch.length} wpisów)...`);
+
+          const deltaIds = currentBatch.map(e => e._id.toString());
+          const contextEntries = await storage.findContextEntries(userId, deltaIds);
+
+          const { topics, synapses } = await analyzeWithSynapses(currentBatch, contextEntries, llm);
+          console.log(`👁️ [Batch] Zidentyfikowano ${topics.length} tematów, ${synapses.length} połączeń`);
+
+          for (const topic of topics) {
+            const count = await storage.applyTopicAnalysis(topic);
+            stats.analyzed += count;
+          }
+
+          if (synapses.length > 0) {
+            const deltaIdSet = new Set(deltaIds);
+            const synapsesCreated = await storage.processSynapseLinks(synapses, deltaIdSet);
+            stats.synapsesCreated += synapsesCreated;
+          }
         }
       }
     }

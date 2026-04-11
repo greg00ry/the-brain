@@ -4,15 +4,16 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
+    "test": "echo \"No tests in example-app\" && exit 0",
     "test:integration": "tsx src/tests/integration.ts"
   },
   "dependencies": {
-    "@the-brain/core": "*",
-    "@the-brain/adapter-sqlite": "*"
+    "@the-brain/adapter-sqlite": "*",
+    "@the-brain/core": "^0.2.11"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "tsx": "^4.16.0",
-    "typescript": "^5.5.3",
-    "@types/node": "^22.0.0"
+    "typescript": "^5.5.3"
   }
 }

@@ -44,6 +44,7 @@ export interface IStorageAdapter {
   findDeltaEntries(userId: string, since: Date): Promise<IVaultEntry[]>;
   findContextEntries(userId: string, excludeIds: string[]): Promise<IVaultEntry[]>;
   applyTopicAnalysis(topic: TopicAnalysis): Promise<number>;
+  markEntriesAnalyzed(entryIds: string[]): Promise<void>;
 
   // ─── Synapse Queries & Management ────────────────────────────────────────
   getSynapsesBySource(entryId: string, limit: number): Promise<{

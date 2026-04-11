@@ -373,6 +373,42 @@ describe("processSynapseLinks", () => {
   });
 });
 
+describe("processSynapseLinks — isPermanent filtering", () => {
+  it("skips synapse when both source and target are isPermanent", async () => {
+    const e1 = await seedEntry("user-1", "doc A", { isPermanent: true });
+    const e2 = await seedEntry("user-1", "doc B", { isPermanent: true });
+    const id1 = e1._id.toString();
+    const count = await adapter.processSynapseLinks(
+      [{ sourceId: id1, targetId: e2._id.toString(), reason: "related", strength: 8 }],
+      new Set([id1]),
+    );
+    expect(count).toBe(0);
+    expect(await Synapse.countDocuments()).toBe(0);
+  });
+
+  it("creates synapse when source is isPermanent but target is not", async () => {
+    const e1 = await seedEntry("user-1", "doc", { isPermanent: true });
+    const e2 = await seedEntry("user-1", "note", { isPermanent: false });
+    const id1 = e1._id.toString();
+    const count = await adapter.processSynapseLinks(
+      [{ sourceId: id1, targetId: e2._id.toString(), reason: "related", strength: 8 }],
+      new Set([id1]),
+    );
+    expect(count).toBe(1);
+  });
+
+  it("creates synapse when target is isPermanent but source is not", async () => {
+    const e1 = await seedEntry("user-1", "note", { isPermanent: false });
+    const e2 = await seedEntry("user-1", "doc", { isPermanent: true });
+    const id1 = e1._id.toString();
+    const count = await adapter.processSynapseLinks(
+      [{ sourceId: id1, targetId: e2._id.toString(), reason: "related", strength: 8 }],
+      new Set([id1]),
+    );
+    expect(count).toBe(1);
+  });
+});
+
 describe("getSynapsesBySource", () => {
   it("returns synapses for entry sorted by weight desc", async () => {
     const e1 = await seedEntry("user-1", "source");

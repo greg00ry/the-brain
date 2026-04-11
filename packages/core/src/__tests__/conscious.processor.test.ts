@@ -43,6 +43,7 @@ function makeStorage(overrides: Partial<IStorageAdapter> = {}): IStorageAdapter 
     findContextEntries: vi.fn().mockResolvedValue([]),
     applyTopicAnalysis: vi.fn().mockResolvedValue(1),
     processSynapseLinks: vi.fn().mockResolvedValue(0),
+    markEntriesAnalyzed: vi.fn().mockResolvedValue(undefined),
     // unused but required by interface
     createEntry: vi.fn(),
     getEntryById: vi.fn(),
@@ -226,6 +227,71 @@ describe("runConsciousProcessor", () => {
     const stats = await runConsciousProcessor(makeLLM(), storage);
     expect(stats).toHaveProperty("analyzed");
     expect(stats).toHaveProperty("synapsesCreated");
+  });
+
+  // ─── Embedding mode ──────────────────────────────────────────────────────
+
+  it("uses embedding adapter instead of LLM when provided", async () => {
+    const entry = makeEntry({ userId: "user-1" });
+    const similar = [makeEntry({ userId: "user-1" })];
+    const llm = makeLLM();
+    const storage = makeStorage({
+      findDeltaEntries: vi.fn().mockResolvedValue([entry]),
+      findSimilarEntries: vi.fn().mockResolvedValue([entry, ...similar]),
+    });
+    const embedding = { embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]) };
+    await runConsciousProcessor(llm, storage, embedding);
+    expect(llm.complete).not.toHaveBeenCalled();
+    expect(storage.findSimilarEntries).toHaveBeenCalled();
+  });
+
+  it("calls markEntriesAnalyzed with all delta entry ids in embedding mode", async () => {
+    const entries = [makeEntry(), makeEntry(), makeEntry()];
+    const storage = makeStorage({
+      findDeltaEntries: vi.fn().mockResolvedValue(entries),
+      findSimilarEntries: vi.fn().mockResolvedValue([]),
+    });
+    const embedding = { embed: vi.fn().mockResolvedValue([0.1, 0.2]) };
+    await runConsciousProcessor(makeLLM(), storage, embedding);
+    expect(storage.markEntriesAnalyzed).toHaveBeenCalledWith(
+      entries.map(e => e._id.toString()),
+    );
+  });
+
+  it("stats.analyzed equals delta entry count in embedding mode", async () => {
+    const entries = [makeEntry(), makeEntry()];
+    const storage = makeStorage({
+      findDeltaEntries: vi.fn().mockResolvedValue(entries),
+      findSimilarEntries: vi.fn().mockResolvedValue([]),
+    });
+    const embedding = { embed: vi.fn().mockResolvedValue([0.1]) };
+    const stats = await runConsciousProcessor(makeLLM(), storage, embedding);
+    expect(stats.analyzed).toBe(2);
+  });
+
+  it("creates synapses from similar entries in embedding mode", async () => {
+    const entry = makeEntry({ userId: "user-1" });
+    const similar = makeEntry({ userId: "user-1" });
+    const storage = makeStorage({
+      findDeltaEntries: vi.fn().mockResolvedValue([entry]),
+      findSimilarEntries: vi.fn().mockResolvedValue([entry, similar]),
+      processSynapseLinks: vi.fn().mockResolvedValue(1),
+    });
+    const embedding = { embed: vi.fn().mockResolvedValue([0.5]) };
+    const stats = await runConsciousProcessor(makeLLM(), storage, embedding);
+    expect(storage.processSynapseLinks).toHaveBeenCalled();
+    expect(stats.synapsesCreated).toBe(1);
+  });
+
+  it("skips embed call when entry already has embedding", async () => {
+    const entry = makeEntry({ embedding: [0.1, 0.2, 0.3] });
+    const storage = makeStorage({
+      findDeltaEntries: vi.fn().mockResolvedValue([entry]),
+      findSimilarEntries: vi.fn().mockResolvedValue([]),
+    });
+    const embedding = { embed: vi.fn().mockResolvedValue([0.9]) };
+    await runConsciousProcessor(makeLLM(), storage, embedding);
+    expect(embedding.embed).not.toHaveBeenCalled();
   });
 
   it("returns zero stats on top-level error", async () => {

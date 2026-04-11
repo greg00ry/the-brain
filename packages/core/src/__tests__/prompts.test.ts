@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ANALYZE_PROMPT } from "../services/ai/prompts/analyze.prompt.js";
 import { ANALYZE_WITH_SYNAPSES_PROMPT } from "../services/ai/prompts/analyze-with-synapses.prompt.js";
-import { LONG_TERM_MEMORY_SUMMARY_PROMPT } from "../services/ai/prompts/ltm-summary.prompt.js";
+
 import { PERSONALITY_SYSTEM_PROMPT } from "../services/ai/prompts/personality.prompt.js";
 import { RESEARCH_ANSWER_PROMPT } from "../services/ai/prompts/research-answer.prompt.js";
 import { SAVE_RESPONSE_PROMPT } from "../services/ai/prompts/save-response.prompt.js";
@@ -95,38 +95,6 @@ describe("ANALYZE_WITH_SYNAPSES_PROMPT", () => {
   });
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// LONG_TERM_MEMORY_SUMMARY_PROMPT
-// ═══════════════════════════════════════════════════════════════════════════════
-
-describe("LONG_TERM_MEMORY_SUMMARY_PROMPT", () => {
-  it("contains topic name", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("Machine Learning", "entry content here");
-    expect(result).toContain("Machine Learning");
-  });
-
-  it("contains entries content", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "specific entry data xyz");
-    expect(result).toContain("specific entry data xyz");
-  });
-
-  it("requests JSON with summary", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "content");
-    expect(result).toContain("summary");
-    expect(result).toContain("JSON");
-  });
-
-  it("mentions 300 word limit for summary", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("topic", "content");
-    expect(result).toContain("300");
-  });
-
-  it("works with empty strings", () => {
-    const result = LONG_TERM_MEMORY_SUMMARY_PROMPT("", "");
-    expect(typeof result).toBe("string");
-    expect(result.length).toBeGreaterThan(0);
-  });
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PERSONALITY_SYSTEM_PROMPT

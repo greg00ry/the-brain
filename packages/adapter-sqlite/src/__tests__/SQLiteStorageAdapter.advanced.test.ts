@@ -264,6 +264,48 @@ describe("deleteVaultEntry cleans up synapses", () => {
   });
 });
 
+// ─── processSynapseLinks isPermanent filtering ───────────────────────────────
+
+describe("processSynapseLinks — isPermanent filtering", () => {
+  it("skips synapse when both source and target are isPermanent", async () => {
+    const s = makeAdapter();
+    const e1 = await s.createEntry("user-1", "doc A", makeAnalysis({ isPermanent: true }));
+    const e2 = await s.createEntry("user-1", "doc B", makeAnalysis({ isPermanent: true }));
+    const id1 = e1._id.toString();
+    const id2 = e2._id.toString();
+    const count = await s.processSynapseLinks(
+      [{ sourceId: id1, targetId: id2, reason: "related", strength: 8 }],
+      new Set([id1]),
+    );
+    expect(count).toBe(0);
+    expect(await s.getSynapsesBySource(id1, 10)).toHaveLength(0);
+  });
+
+  it("creates synapse when source is isPermanent but target is not", async () => {
+    const s = makeAdapter();
+    const e1 = await s.createEntry("user-1", "doc", makeAnalysis({ isPermanent: true }));
+    const e2 = await s.createEntry("user-1", "note", makeAnalysis({ isPermanent: false }));
+    const id1 = e1._id.toString();
+    const count = await s.processSynapseLinks(
+      [{ sourceId: id1, targetId: e2._id.toString(), reason: "related", strength: 8 }],
+      new Set([id1]),
+    );
+    expect(count).toBe(1);
+  });
+
+  it("creates synapse when target is isPermanent but source is not", async () => {
+    const s = makeAdapter();
+    const e1 = await s.createEntry("user-1", "note", makeAnalysis({ isPermanent: false }));
+    const e2 = await s.createEntry("user-1", "doc", makeAnalysis({ isPermanent: true }));
+    const id1 = e1._id.toString();
+    const count = await s.processSynapseLinks(
+      [{ sourceId: id1, targetId: e2._id.toString(), reason: "related", strength: 8 }],
+      new Set([id1]),
+    );
+    expect(count).toBe(1);
+  });
+});
+
 // ─── Stress ───────────────────────────────────────────────────────────────────
 
 describe("stress tests", () => {

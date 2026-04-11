@@ -48,7 +48,7 @@ function makeStorage(overrides: Partial<IStorageAdapter> = {}): IStorageAdapter 
     updateEntryEmbedding: vi.fn(),
     findDeltaEntries: vi.fn(),
     findContextEntries: vi.fn(),
-    applyTopicAnalysis: vi.fn(),
+    applyTopicAnalysis: vi.fn(), markEntriesAnalyzed: vi.fn(),
     getSynapsesBySource: vi.fn(),
     processSynapseLinks: vi.fn(),
     ...overrides,
