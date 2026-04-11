@@ -1,11 +1,18 @@
-import { Brain, OpenAICompatibleAdapter, OpenAICompatibleEmbeddingAdapter } from "@the-brain/core";
+import {
+  Brain,
+  OpenAICompatibleAdapter,
+  OpenAICompatibleEmbeddingAdapter,
+  MemoryPlugin,
+  SavingPlugin,
+  type BrainPlugin,
+} from "@the-brain/core";
 import { SQLiteStorageAdapter } from "@the-brain/adapter-sqlite";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 const llm = new OpenAICompatibleAdapter(
   "http://localhost:11434/v1/chat/completions",
-  "llama3",
+  "llama3.2",
 );
 
 const embedding = new OpenAICompatibleEmbeddingAdapter(
@@ -17,22 +24,32 @@ const storage = new SQLiteStorageAdapter("./.brain");
 
 const brain = new Brain(llm, storage, embedding);
 
-// ─── Custom action ────────────────────────────────────────────────────────────
+// ─── Custom plugin ────────────────────────────────────────────────────────────
 
-await brain.loadActions();
-
-await brain.registerAction(
-  "TRADING_SIGNAL",
-  "user asks about trading signals, market analysis, or investment ideas",
-  async (_userId, text, { synapticTree, hasContext }) => {
-    const context = hasContext ? `\nRelevant memory:\n${synapticTree}` : "";
-    const answer = await llm.complete({
-      userPrompt: `You are a trading assistant. Analyze: "${text}"${context}\nProvide a concise trading insight.`,
-      temperature: 0.3,
-      maxTokens: 200,
-    });
-    return answer ?? "Could not analyze.";
+class TradingPlugin implements BrainPlugin {
+  async register(brain: Brain) {
+    await brain.registerAction(
+      "TRADING_SIGNAL",
+      "user asks about trading signals, market analysis, or investment ideas",
+      async (_userId, text, { synapticTree, hasContext }) => {
+        const context = hasContext ? `\nRelevant memory:\n${synapticTree}` : "";
+        const answer = await brain.llm.complete({
+          userPrompt: `You are a trading assistant. Analyze: "${text}"${context}\nProvide a concise trading insight.`,
+          temperature: 0.3,
+          maxTokens: 200,
+        });
+        return answer ?? "Could not analyze.";
+      },
+    );
   }
+}
+
+// ─── Load plugins ─────────────────────────────────────────────────────────────
+
+await brain.use(
+  new SavingPlugin(),
+  new MemoryPlugin(),
+  new TradingPlugin(),
 );
 
 // ─── Run ──────────────────────────────────────────────────────────────────────

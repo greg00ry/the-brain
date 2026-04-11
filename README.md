@@ -29,7 +29,7 @@ npm install @the-brain/core @the-brain/adapter-sqlite
 ```
 
 ```typescript
-import { Brain, OpenAICompatibleAdapter } from "@the-brain/core";
+import { Brain, OpenAICompatibleAdapter, SavingPlugin, MemoryPlugin } from "@the-brain/core";
 import { SQLiteStorageAdapter } from "@the-brain/adapter-sqlite";
 
 const brain = new Brain(
@@ -40,7 +40,10 @@ const brain = new Brain(
   new SQLiteStorageAdapter("./.brain")
 );
 
-await brain.loadActions();
+await brain.use(
+  new SavingPlugin(),   // enables SAVE_ONLY action
+  new MemoryPlugin(),   // enables RESEARCH_BRAIN action
+);
 
 // Save a fact
 await brain.save("user-1", "I prefer functional programming");
@@ -91,27 +94,40 @@ new OpenAICompatibleAdapter(
 
 ---
 
-## Custom Actions
+## Plugins
 
-Build any agent on top of the framework:
+Brain has no built-in actions. Everything is a plugin — including memory.
 
 ```typescript
-await brain.registerAction(
-  "TRADING_SIGNAL",
-  "user asks about trading signals or market analysis",
-  async (userId, text, { synapticTree, hasContext }, llm) => {
-    const context = hasContext ? `\nRelevant memory:\n${synapticTree}` : "";
-    const answer = await llm.complete({
-      userPrompt: `Analyze: "${text}"${context}`,
-      temperature: 0.3,
-      maxTokens: 300,
-    });
-    return answer ?? "Could not analyze.";
+import { Brain, SavingPlugin, MemoryPlugin, type BrainPlugin } from "@the-brain/core";
+
+// Built-in plugins:
+await brain.use(new SavingPlugin());   // SAVE_ONLY — stores facts
+await brain.use(new MemoryPlugin());   // RESEARCH_BRAIN — searches memory
+
+// Custom plugin:
+class TradingPlugin implements BrainPlugin {
+  async register(brain: Brain) {
+    await brain.registerAction(
+      "TRADING_SIGNAL",
+      "user asks about trading signals or market analysis",
+      async (_userId, text, { synapticTree, hasContext }) => {
+        const context = hasContext ? `\nRelevant memory:\n${synapticTree}` : "";
+        const answer = await brain.llm.complete({
+          userPrompt: `Analyze: "${text}"${context}`,
+          temperature: 0.3,
+          maxTokens: 300,
+        });
+        return answer ?? "Could not analyze.";
+      },
+    );
   }
-);
+}
+
+await brain.use(new TradingPlugin());
 ```
 
-Legal assistant, trading agent, medical notes, dev assistant — same framework, different actions and personality prompt.
+Legal assistant, trading agent, medical notes, dev assistant — same framework, different plugins.
 
 ---
 
