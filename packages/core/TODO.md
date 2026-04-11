@@ -26,4 +26,23 @@ Pomysł na poprawę klasyfikacji intencji:
 - Pomysł: zastąpić kategorię wolnymi tagami generowanymi przez model (np. `["prawo autorskie", "licencje", "dozwolony użytek"]`)
 - Wymaga zmiany: `analyze.service.ts`, `analyze.prompt.ts`, `conscious.processor.ts`, `types/brain.ts`
 
-## ReAct agentic
+## ReAct agentic loop
+Obecny model: 1 wiadomość → klasyfikacja → 1 akcja → odpowiedź. Brak chainowania.
+
+Cel: pętla Reason → Act → Observe → Reason → ... → odpowiedź końcowa.
+
+Przykład workflow:
+- "znajdź coś o prawach autorskich i zapisz" → SAVE_SEARCH → obserwuje wynik → SAVE_ONLY → done
+- "sprawdź czy mam coś o X, jeśli nie to wyszukaj" → RESEARCH_BRAIN → brak → SAVE_SEARCH → done
+
+Pomysł implementacji:
+- `brain.run(userId, text)` zamiast `brain.process()` — uruchamia pętlę ReAct
+- każda akcja zwraca `{ result, done: boolean, nextHint? }` zamiast tylko stringa
+- max N iteracji (zabezpieczenie przed infinite loop)
+- historia kroków widoczna w odpowiedzi końcowej
+
+Multi-agent:
+- każdy agent = Brain z innym systemPrompt + innymi akcjami
+- orchestrator (też Brain) routuje do właściwego agenta
+- agenci mogą wywoływać innych agentów przez akcje
+- do przemyślenia: jak przekazywać kontekst między agentami
