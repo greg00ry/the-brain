@@ -11,7 +11,9 @@ export const proccessAndStore = async (
   embedding?: IEmbeddingAdapter,
   isPermanent = false,
 ) => {
-  const analysis = await analyzeTextWithAI(text, llm);
+  const analysis = isPermanent
+    ? { summary: text.substring(0, 100), strength: 10, isProcessed: true }
+    : await analyzeTextWithAI(text, llm);
   const entry = await storage.createEntry(userId, text, { ...analysis, isPermanent });
 
   if (embedding) {
