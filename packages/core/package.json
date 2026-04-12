@@ -1,6 +1,6 @@
 {
   "name": "@the-brain/core",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "description": "LLM-agnostic cognitive memory framework — biologically-inspired decay, synapses, Graph RAG",
   "license": "AGPL-3.0",
   "publishConfig": {

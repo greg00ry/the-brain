@@ -123,6 +123,15 @@ export class Brain {
     this.handlers.delete(name);
   }
 
+  async addIntentExamples(actionName: string, examples: string[]): Promise<void> {
+    if (!this.embedding) {
+      console.warn(`[Brain] addIntentExamples: no embedding adapter — skipping intent points for "${actionName}"`);
+      return;
+    }
+    const embeddings = await Promise.all(examples.map(e => this.embedding!.embed(e)));
+    await this.storage.upsertIntentPoints(actionName, embeddings);
+  }
+
   // ─── Process ──────────────────────────────────────────────────────────────
 
   async process(userId: string, text: string): Promise<ProcessResult> {
