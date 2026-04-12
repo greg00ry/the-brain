@@ -363,3 +363,71 @@ describe("Brain", () => {
     expect(storage.getChatHistory).toHaveBeenCalledWith("user-1");
   });
 });
+
+// ─── Native Tool Calling ──────────────────────────────────────────────────────
+
+describe("Brain — native tool calling", () => {
+  it("uses completeWithTools when adapter supports it", async () => {
+    const storage = makeMockStorage();
+    const llm: ILLMAdapter = {
+      complete: vi.fn().mockResolvedValue('{"action":"SAVE_ONLY","confidence":90,"reasoning":"test"}'),
+      completeWithTools: vi.fn().mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} }),
+    };
+
+    const brain = new Brain(llm, storage);
+    await brain.use(new MemoryPlugin());
+    await brain.loadActions();
+
+    const result = await brain.process("user-1", "what do I know about cats?");
+
+    expect(llm.completeWithTools).toHaveBeenCalled();
+    expect(result.action).toBe("RESEARCH_BRAIN");
+  });
+
+  it("falls back to classifyIntent when completeWithTools returns null", async () => {
+    const storage = makeMockStorage();
+    const llm: ILLMAdapter = {
+      complete: vi.fn().mockResolvedValue('{"action":"SAVE_ONLY","confidence":90,"reasoning":"test"}'),
+      completeWithTools: vi.fn().mockResolvedValue(null),
+    };
+
+    const brain = new Brain(llm, storage);
+    await brain.use(new SavingPlugin(), new MemoryPlugin());
+    await brain.loadActions();
+
+    const result = await brain.process("user-1", "remember this");
+
+    expect(result.action).toBe("SAVE_ONLY");
+  });
+
+  it("falls back to classifyIntent when completeWithTools throws", async () => {
+    const storage = makeMockStorage();
+    const llm: ILLMAdapter = {
+      complete: vi.fn().mockResolvedValue('{"action":"SAVE_ONLY","confidence":90,"reasoning":"test"}'),
+      completeWithTools: vi.fn().mockRejectedValue(new Error("tool calling not supported")),
+    };
+
+    const brain = new Brain(llm, storage);
+    await brain.use(new SavingPlugin(), new MemoryPlugin());
+    await brain.loadActions();
+
+    const result = await brain.process("user-1", "remember this");
+
+    expect(result.action).toBe("SAVE_ONLY");
+  });
+
+  it("skips completeWithTools when adapter does not implement it", async () => {
+    const storage = makeMockStorage();
+    const llm: ILLMAdapter = {
+      complete: vi.fn().mockResolvedValue('{"action":"SAVE_ONLY","confidence":90,"reasoning":"test"}'),
+    };
+
+    const brain = new Brain(llm, storage);
+    await brain.use(new SavingPlugin(), new MemoryPlugin());
+    await brain.loadActions();
+
+    const result = await brain.process("user-1", "remember this");
+
+    expect(result.action).toBe("SAVE_ONLY");
+  });
+});

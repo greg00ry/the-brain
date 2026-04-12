@@ -1,4 +1,4 @@
-import { ILLMAdapter } from "./adapters/ILLMAdapter.js";
+import { ILLMAdapter, LLMTool } from "./adapters/ILLMAdapter.js";
 import { IVaultEntry } from "./types/brain.js";
 import { IStorageAdapter, ActionInfo } from "./adapters/IStorageAdapter.js";
 import { IEmbeddingAdapter } from "./adapters/IEmbeddingAdapter.js";
@@ -132,13 +132,45 @@ export class Brain {
     await this.storage.upsertIntentPoints(actionName, embeddings);
   }
 
+  // ─── Tool Calling ─────────────────────────────────────────────────────────
+
+  private async _classifyWithTools(text: string, actions: ActionInfo[]): Promise<{ action: string } | null> {
+    if (!this.llm.completeWithTools || actions.length === 0) return null;
+
+    const tools: LLMTool[] = actions.map(a => ({
+      type: "function",
+      function: { name: a.name, description: a.description },
+    }));
+
+    try {
+      const toolCall = await this.llm.completeWithTools(
+        { userPrompt: text, temperature: 0, maxTokens: 50 },
+        tools,
+      );
+      if (toolCall && actions.some(a => a.name === toolCall.name)) {
+        return { action: toolCall.name };
+      }
+    } catch (err) {
+      console.warn("[Brain] Tool calling failed, falling back to classifyIntent:", err instanceof Error ? err.message : String(err));
+    }
+
+    return null;
+  }
+
   // ─── Process ──────────────────────────────────────────────────────────────
 
   async process(userId: string, text: string): Promise<ProcessResult> {
     const actions = this.actionsCache;
 
     const chatHistory = await this.storage.getChatHistory(userId);
-    const intent = await classifyIntent({ userText: text, chatHistory, actions, storage: this.storage, embeddingAdapter: this.embedding }, this.llm);
+
+    // Step 1: Native tool calling (if adapter supports it)
+    let intent = await this._classifyWithTools(text, actions);
+
+    // Step 2: Fallback to prompt-based intent classification
+    if (!intent) {
+      intent = await classifyIntent({ userText: text, chatHistory, actions, storage: this.storage, embeddingAdapter: this.embedding }, this.llm);
+    }
     const context = await getBrainContext(userId, text, this.storage, this.embedding, this.cfg.memory);
 
     const handler = this.handlers.get(intent.action);

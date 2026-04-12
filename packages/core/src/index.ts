@@ -7,7 +7,7 @@ export { MemoryPlugin } from "./plugins/MemoryPlugin.js";
 export { SavingPlugin } from "./plugins/SavingPlugin.js";
 
 // ─── Adapter interfaces ───────────────────────────────────────────────────────
-export type { ILLMAdapter, LLMRequest } from "./adapters/ILLMAdapter.js";
+export type { ILLMAdapter, LLMRequest, LLMTool, LLMToolCall } from "./adapters/ILLMAdapter.js";
 export type { IEmbeddingAdapter } from "./adapters/IEmbeddingAdapter.js";
 export type {
   IStorageAdapter,
