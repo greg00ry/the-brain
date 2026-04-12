@@ -286,30 +286,6 @@ describe("custom actions routing", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("chat history in prompt", () => {
-  it("LLM is called with prompt containing conversation history", async () => {
-    const llm = makeLLM(llmJson("SAVE_ONLY", 80));
-    const chatHistory = [
-      { role: "user" as const, content: "I like Python" },
-      { role: "assistant" as const, content: "Got it!" },
-    ];
-    await classifyIntent({ userText: "and I hate Java", actions: ACTIONS, chatHistory }, llm);
-    const calledPrompt = (llm.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMRequest;
-    expect(calledPrompt.userPrompt).toContain("I like Python");
-    expect(calledPrompt.userPrompt).toContain("Got it!");
-  });
-
-  it("only last 3 messages from history are used", async () => {
-    const llm = makeLLM(llmJson("SAVE_ONLY", 80));
-    const chatHistory = Array.from({ length: 10 }, (_, i) => ({
-      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
-      content: `message ${i}`,
-    }));
-    await classifyIntent({ userText: "new message", actions: ACTIONS, chatHistory }, llm);
-    const calledPrompt = (llm.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMRequest;
-    expect(calledPrompt.userPrompt).not.toContain("message 0");
-    expect(calledPrompt.userPrompt).toContain("message 9");
-  });
-
   it("prompt includes all action names", async () => {
     const llm = makeLLM(llmJson("SAVE_ONLY", 80));
     await classifyIntent({ userText: "test", actions: ACTIONS_WITH_CUSTOM }, llm);

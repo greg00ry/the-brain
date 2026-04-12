@@ -21,15 +21,7 @@ export interface ClassifyIntentParams {
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
-function buildPrompt(userText: string, actions: ActionInfo[], chatHistory?: ChatMessage[]): string {
-  let history = '';
-  if (chatHistory && chatHistory.length > 0) {
-    history = '\nCONVERSATION:\n';
-    chatHistory.slice(-3).forEach(msg => {
-      history += `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.content}\n`;
-    });
-  }
-
+function buildPrompt(userText: string, actions: ActionInfo[]): string {
   const actionList = actions
     .map(a => `- "${a.name}": ${a.description}`)
     .join('\n');
@@ -41,11 +33,7 @@ You are a deterministic routing engine. Return ONLY JSON.
 ${actionList}
 
 ### JSON STRUCTURE
-{
-  "action": "<one of the action names above>",
-  "confidence": <integer 0-100>,
-  "reasoning": "one short sentence"
-}${history}
+{"action":"<one of the action names above>","confidence":<integer 0-100>,"reasoning":"one short sentence"}
 
 USER: ${userText}`;
 }
@@ -113,7 +101,7 @@ export async function classifyIntent(
 
   // Step 3: LLM classification
   try {
-    const prompt = buildPrompt(userText, actions, chatHistory);
+    const prompt = buildPrompt(userText, actions);
 
     const rawContent = await llm.complete({
       userPrompt: prompt,

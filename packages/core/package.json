@@ -1,6 +1,6 @@
 {
   "name": "@the-brain/core",
-  "version": "0.2.15",
+  "version": "0.2.18",
   "description": "LLM-agnostic cognitive memory framework — biologically-inspired decay, synapses, Graph RAG",
   "license": "AGPL-3.0",
   "publishConfig": {
@@ -27,7 +27,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

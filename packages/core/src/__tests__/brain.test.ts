@@ -351,7 +351,7 @@ describe("Brain", () => {
     expect(result.action).toBe("SAVE_ONLY");
   });
 
-  it("process passes chat history from storage to classifyIntent", async () => {
+  it("process fetches chat history from storage (passed to action handler)", async () => {
     const history = [
       { role: "user" as const, content: "earlier message" },
       { role: "assistant" as const, content: "earlier reply" },
@@ -360,9 +360,6 @@ describe("Brain", () => {
 
     await brain.process("user-1", "follow up");
 
-    const intentCall = (llm.complete as ReturnType<typeof vi.fn>).mock.calls
-      .find(c => c[0].userPrompt?.includes("### ROLE"));
-    expect(intentCall).toBeDefined();
-    expect(intentCall![0].userPrompt).toContain("earlier message");
+    expect(storage.getChatHistory).toHaveBeenCalledWith("user-1");
   });
 });
