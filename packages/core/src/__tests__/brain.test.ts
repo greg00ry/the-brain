@@ -38,6 +38,8 @@ function makeMockStorage(): IStorageAdapter {
     pruneDeadSynapses: vi.fn().mockResolvedValue(0),
     countEntries: vi.fn().mockResolvedValue(0),
     removeAction: vi.fn().mockResolvedValue(undefined),
+    upsertIntentPoints: vi.fn().mockResolvedValue(undefined),
+    findNearestIntentAction: vi.fn().mockResolvedValue([]),
   } as unknown as IStorageAdapter;
 }
 

@@ -71,8 +71,9 @@ export const MEMORY = {
 // ─── Routing ──────────────────────────────────────────────────────────────────
 
 export const ROUTING = {
-  RULE_HIGH_CONFIDENCE: 90,  // rules above this skip LLM entirely
-  LLM_MIN_CONFIDENCE: 75,    // LLM results below this trigger rule fallback
+  RULE_HIGH_CONFIDENCE: 90,           // rules above this skip LLM entirely
+  LLM_MIN_CONFIDENCE: 75,             // LLM results below this trigger rule fallback
+  INTENT_POINTS_MIN_SIMILARITY: 0.82, // cosine similarity threshold — above this skips LLM
 } as const;
 
 // ─── Chat ─────────────────────────────────────────────────────────────────────

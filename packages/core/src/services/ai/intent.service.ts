@@ -1,8 +1,9 @@
 import { IntentResult } from "./intent.types.js";
 import { ILLMAdapter } from "../../adapters/ILLMAdapter.js";
+import { IEmbeddingAdapter } from "../../adapters/IEmbeddingAdapter.js";
+import { IStorageAdapter, ActionInfo } from "../../adapters/IStorageAdapter.js";
 import { cleanAndParseJSON } from "../../utils/json.js";
 import { matchRules } from "./rule-engine.js";
-import { ActionInfo } from "../../adapters/IStorageAdapter.js";
 import { LLM, ROUTING } from "../../config/constants.js";
 
 export interface ChatMessage {
@@ -14,6 +15,8 @@ export interface ClassifyIntentParams {
   userText: string;
   chatHistory?: ChatMessage[];
   actions: ActionInfo[];
+  storage?: IStorageAdapter;
+  embeddingAdapter?: IEmbeddingAdapter;
 }
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
@@ -74,7 +77,7 @@ export async function classifyIntent(
   params: ClassifyIntentParams,
   llm: ILLMAdapter,
 ): Promise<IntentResult> {
-  const { userText, chatHistory = [], actions } = params;
+  const { userText, chatHistory = [], actions, storage, embeddingAdapter } = params;
   const validActions = new Set(actions.map(a => a.name));
   const defaultAction = actions[0]?.name ?? "SAVE_ONLY";
 
@@ -89,7 +92,26 @@ export async function classifyIntent(
     };
   }
 
-  // Step 2: LLM classification
+  // Step 2: Intent points (embedding-based) — skips LLM when similarity is high
+  if (storage && embeddingAdapter) {
+    try {
+      const queryEmbedding = await embeddingAdapter.embed(userText);
+      const nearest = await storage.findNearestIntentAction(queryEmbedding, 1);
+      const top = nearest[0];
+      if (top && top.similarity >= ROUTING.INTENT_POINTS_MIN_SIMILARITY && validActions.has(top.actionName)) {
+        return {
+          action: top.actionName,
+          reasoning: `Intent points match (similarity: ${top.similarity.toFixed(3)})`,
+          confidence: Math.round(top.similarity * 100),
+          source: "rule",
+        };
+      }
+    } catch (err) {
+      console.error(`[IntentService] Intent points error:`, err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Step 3: LLM classification
   try {
     const prompt = buildPrompt(userText, actions, chatHistory);
 

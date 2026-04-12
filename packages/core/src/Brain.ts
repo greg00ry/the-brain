@@ -106,10 +106,15 @@ export class Brain {
     this.actionsCache = await this.storage.getActions();
   }
 
-  async registerAction(name: string, description: string, handler: ActionHandler): Promise<void> {
+  async registerAction(name: string, description: string, handler: ActionHandler, examples?: string[]): Promise<void> {
     await this.storage.upsertAction(name, description, false);
     this.actionsCache = await this.storage.getActions();
     this.handlers.set(name, handler);
+
+    if (examples && examples.length > 0 && this.embedding) {
+      const embeddings = await Promise.all(examples.map(e => this.embedding!.embed(e)));
+      await this.storage.upsertIntentPoints(name, embeddings);
+    }
   }
 
   async removeAction(name: string): Promise<void> {
@@ -124,7 +129,7 @@ export class Brain {
     const actions = this.actionsCache;
 
     const chatHistory = await this.storage.getChatHistory(userId);
-    const intent = await classifyIntent({ userText: text, chatHistory, actions }, this.llm);
+    const intent = await classifyIntent({ userText: text, chatHistory, actions, storage: this.storage, embeddingAdapter: this.embedding }, this.llm);
     const context = await getBrainContext(userId, text, this.storage, this.embedding, this.cfg.memory);
 
     const handler = this.handlers.get(intent.action);

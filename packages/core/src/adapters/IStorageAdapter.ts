@@ -26,6 +26,8 @@ export interface IStorageAdapter {
   getActions(): Promise<ActionInfo[]>;
   upsertAction(name: string, description: string, isBuiltIn?: boolean): Promise<void>;
   removeAction(name: string): Promise<void>;
+  upsertIntentPoints(actionName: string, embeddings: number[][]): Promise<void>;
+  findNearestIntentAction(embedding: number[], topK?: number): Promise<{ actionName: string; similarity: number }[]>;
 
   // ─── Chat History ─────────────────────────────────────────────────────────
   getChatHistory(userId: string): Promise<{ role: "user" | "assistant"; content: string }[]>;

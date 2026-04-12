@@ -89,10 +89,11 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
       );
 
       CREATE TABLE IF NOT EXISTS actions (
-        name        TEXT PRIMARY KEY,
-        description TEXT NOT NULL,
-        isBuiltIn   INTEGER DEFAULT 0,
-        isActive    INTEGER DEFAULT 1
+        name               TEXT PRIMARY KEY,
+        description        TEXT NOT NULL,
+        isBuiltIn          INTEGER DEFAULT 0,
+        isActive           INTEGER DEFAULT 1,
+        exampleEmbeddings  TEXT DEFAULT '[]'
       );
 
       CREATE TABLE IF NOT EXISTS chat_history (
@@ -107,6 +108,8 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
         updatedAt TEXT NOT NULL
       );
     `);
+    // migrations for existing databases
+    try { this.db.exec("ALTER TABLE actions ADD COLUMN exampleEmbeddings TEXT DEFAULT '[]'"); } catch {}
   }
 
   // ─── Entry CRUD ───────────────────────────────────────────────────────────
@@ -171,6 +174,26 @@ export class SQLiteStorageAdapter implements IStorageAdapter {
 
   async removeAction(name: string): Promise<void> {
     this.db.prepare(`DELETE FROM actions WHERE name = ? AND isBuiltIn = 0`).run(name);
+  }
+
+  async upsertIntentPoints(actionName: string, embeddings: number[][]): Promise<void> {
+    this.db.prepare(
+      "UPDATE actions SET exampleEmbeddings = ? WHERE name = ?"
+    ).run(JSON.stringify(embeddings), actionName);
+  }
+
+  async findNearestIntentAction(embedding: number[], topK = 3): Promise<{ actionName: string; similarity: number }[]> {
+    const rows = this.db.prepare(
+      "SELECT name, exampleEmbeddings FROM actions WHERE isActive = 1 AND exampleEmbeddings != '[]'"
+    ).all() as { name: string; exampleEmbeddings: string }[];
+
+    const results: { actionName: string; similarity: number }[] = [];
+    for (const row of rows) {
+      const embeddings: number[][] = JSON.parse(row.exampleEmbeddings);
+      const best = Math.max(...embeddings.map(e => cosineSimilarity(embedding, e)));
+      results.push({ actionName: row.name, similarity: best });
+    }
+    return results.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
   }
 
   // ─── Chat History ─────────────────────────────────────────────────────────

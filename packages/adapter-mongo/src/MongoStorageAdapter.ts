@@ -149,6 +149,21 @@ export class MongoStorageAdapter implements IStorageAdapter {
     await Action.deleteOne({ name, isBuiltIn: false });
   }
 
+  async upsertIntentPoints(actionName: string, embeddings: number[][]): Promise<void> {
+    await Action.updateOne({ name: actionName }, { $set: { exampleEmbeddings: embeddings } });
+  }
+
+  async findNearestIntentAction(embedding: number[], topK = 3): Promise<{ actionName: string; similarity: number }[]> {
+    const actions = await Action.find({ isActive: true, 'exampleEmbeddings.0': { $exists: true } })
+      .select('name exampleEmbeddings');
+
+    const results = actions.map(action => {
+      const best = Math.max(...action.exampleEmbeddings.map((e: number[]) => cosineSimilarity(embedding, e)));
+      return { actionName: action.name, similarity: best };
+    });
+    return results.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
+  }
+
   // ─── Intent Context ───────────────────────────────────────────────────────
 
   async findRelevantEntries(userId: string, keywords: string[]): Promise<IVaultEntry[]> {

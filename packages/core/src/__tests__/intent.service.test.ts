@@ -406,3 +406,89 @@ describe("Structural routing: question redirected from SAVE_ONLY to RESEARCH_BRA
     expect(result.action).toBe("RESEARCH_BRAIN");
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP 2 — Intent points (embedding-based)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("Step 2: intent points skip LLM when similarity is high", () => {
+  function makeStorage(similarity: number, actionName = "TRADING_SIGNAL") {
+    return {
+      findNearestIntentAction: vi.fn().mockResolvedValue([{ actionName, similarity }]),
+    } as any;
+  }
+
+  function makeEmbedding() {
+    return { embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]) };
+  }
+
+  it("skips LLM when similarity >= threshold", async () => {
+    const llm = makeLLM(llmJson("SAVE_ONLY", 90));
+    const result = await classifyIntent({
+      userText: "what's bitcoin doing?",
+      actions: ACTIONS_WITH_CUSTOM,
+      storage: makeStorage(0.90),
+      embeddingAdapter: makeEmbedding(),
+    }, llm);
+    expect(result.action).toBe("TRADING_SIGNAL");
+    expect(result.source).toBe("rule");
+    expect(llm.complete).not.toHaveBeenCalled();
+  });
+
+  it("falls through to LLM when similarity < threshold", async () => {
+    const llm = makeLLM(llmJson("TRADING_SIGNAL", 80));
+    const result = await classifyIntent({
+      userText: "something vague",
+      actions: ACTIONS_WITH_CUSTOM,
+      storage: makeStorage(0.70),
+      embeddingAdapter: makeEmbedding(),
+    }, llm);
+    expect(llm.complete).toHaveBeenCalled();
+  });
+
+  it("skips intent points step when no embeddingAdapter provided", async () => {
+    const llm = makeLLM(llmJson("SAVE_ONLY", 90));
+    const storage = makeStorage(0.99);
+    await classifyIntent({
+      userText: "what's bitcoin doing?",
+      actions: ACTIONS_WITH_CUSTOM,
+      storage,
+    }, llm);
+    expect(storage.findNearestIntentAction).not.toHaveBeenCalled();
+  });
+
+  it("skips intent points step when no storage provided", async () => {
+    const llm = makeLLM(llmJson("SAVE_ONLY", 90));
+    const embedding = makeEmbedding();
+    await classifyIntent({
+      userText: "what's bitcoin doing?",
+      actions: ACTIONS_WITH_CUSTOM,
+      embeddingAdapter: embedding,
+    }, llm);
+    expect(embedding.embed).not.toHaveBeenCalled();
+  });
+
+  it("falls through to LLM when action from intent points is not in validActions", async () => {
+    const llm = makeLLM(llmJson("SAVE_ONLY", 90));
+    await classifyIntent({
+      userText: "something",
+      actions: ACTIONS, // does not include TRADING_SIGNAL
+      storage: makeStorage(0.95, "TRADING_SIGNAL"),
+      embeddingAdapter: makeEmbedding(),
+    }, llm);
+    expect(llm.complete).toHaveBeenCalled();
+  });
+
+  it("continues silently when embedding throws", async () => {
+    const llm = makeLLM(llmJson("SAVE_ONLY", 90));
+    const badEmbedding = { embed: vi.fn().mockRejectedValue(new Error("embed failed")) };
+    const result = await classifyIntent({
+      userText: "test",
+      actions: ACTIONS,
+      storage: makeStorage(0.99),
+      embeddingAdapter: badEmbedding,
+    }, llm);
+    expect(result).toBeDefined();
+    expect(llm.complete).toHaveBeenCalled();
+  });
+});

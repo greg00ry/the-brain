@@ -43,7 +43,7 @@ function makeStorage(overrides: Partial<IStorageAdapter> = {}): IStorageAdapter 
     // rest unused
     createEntry: vi.fn(), getEntryById: vi.fn(), getVaultData: vi.fn(),
     deleteVaultEntry: vi.fn(), getUniqueUserIds: vi.fn(),
-    getActions: vi.fn(), upsertAction: vi.fn(), removeAction: vi.fn(), getChatHistory: vi.fn(),
+    getActions: vi.fn(), upsertAction: vi.fn(), upsertIntentPoints: vi.fn(), findNearestIntentAction: vi.fn().mockResolvedValue([]), removeAction: vi.fn(), getChatHistory: vi.fn(),
     appendChatMessage: vi.fn(), updateEntryEmbedding: vi.fn(),
     findDeltaEntries: vi.fn(), findContextEntries: vi.fn(),
     applyTopicAnalysis: vi.fn(), processSynapseLinks: vi.fn(), markEntriesAnalyzed: vi.fn(),

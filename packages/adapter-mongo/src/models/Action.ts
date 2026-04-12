@@ -5,6 +5,7 @@ const actionSchema = new mongoose.Schema({
   description: { type: String, required: true },
   isActive: { type: Boolean, default: true },
   isBuiltIn: { type: Boolean, default: false },
+  exampleEmbeddings: { type: [[Number]], default: [] },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -13,6 +14,7 @@ export interface IActionDoc extends mongoose.Document {
   description: string;
   isActive: boolean;
   isBuiltIn: boolean;
+  exampleEmbeddings: number[][];
   createdAt: Date;
 }
 
