@@ -2,7 +2,7 @@ import { ILLMAdapter, LLMTool } from "./adapters/ILLMAdapter.js";
 import { IVaultEntry } from "./types/brain.js";
 import { IStorageAdapter, ActionInfo } from "./adapters/IStorageAdapter.js";
 import { IEmbeddingAdapter } from "./adapters/IEmbeddingAdapter.js";
-import { classifyIntent, ChatMessage } from "./services/ai/intent.service.js";
+import { ChatMessage } from "./services/ai/intent.service.js";
 import { getBrainContext } from "./services/ai/intent.context.service.js";
 import { proccessAndStore } from "./services/ingest/ingest.service.js";
 import { runSubconsciousRoutine } from "./services/brain/subconscious.routine.js";
@@ -134,27 +134,22 @@ export class Brain {
 
   // ─── Tool Calling ─────────────────────────────────────────────────────────
 
-  private async _classifyWithTools(text: string, actions: ActionInfo[]): Promise<{ action: string } | null> {
-    if (!this.llm.completeWithTools || actions.length === 0) return null;
-
+  private async _classifyWithTools(text: string, actions: ActionInfo[]): Promise<{ action: string }> {
     const tools: LLMTool[] = actions.map(a => ({
       type: "function",
       function: { name: a.name, description: a.description },
     }));
 
-    try {
-      const toolCall = await this.llm.completeWithTools(
-        { userPrompt: text, temperature: 0, maxTokens: 50 },
-        tools,
-      );
-      if (toolCall && actions.some(a => a.name === toolCall.name)) {
-        return { action: toolCall.name };
-      }
-    } catch (err) {
-      console.warn("[Brain] Tool calling failed, falling back to classifyIntent:", err instanceof Error ? err.message : String(err));
+    const toolCall = await this.llm.completeWithTools!(
+      { userPrompt: text, temperature: 0, maxTokens: 50 },
+      tools,
+    );
+
+    if (!toolCall || !actions.some(a => a.name === toolCall.name)) {
+      throw new Error(`[Brain] Tool calling returned invalid action: ${toolCall?.name}`);
     }
 
-    return null;
+    return { action: toolCall.name };
   }
 
   // ─── Process ──────────────────────────────────────────────────────────────
@@ -163,14 +158,7 @@ export class Brain {
     const actions = this.actionsCache;
 
     const chatHistory = await this.storage.getChatHistory(userId);
-
-    // Step 1: Native tool calling (if adapter supports it)
-    let intent = await this._classifyWithTools(text, actions);
-
-    // Step 2: Fallback to prompt-based intent classification
-    if (!intent) {
-      intent = await classifyIntent({ userText: text, chatHistory, actions, storage: this.storage, embeddingAdapter: this.embedding }, this.llm);
-    }
+    const intent = await this._classifyWithTools(text, actions);
     const context = await getBrainContext(userId, text, this.storage, this.embedding, this.cfg.memory);
 
     const handler = this.handlers.get(intent.action);

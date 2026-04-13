@@ -53,17 +53,14 @@ describe("Brain", () => {
   beforeEach(async () => {
     llm = {
       complete: vi.fn().mockImplementation((req: LLMRequest) => {
-        // Intent classification — prompt contains "### ROLE"
-        if (req.userPrompt?.includes("### ROLE")) {
-          return Promise.resolve('{"action":"SAVE_ONLY","confidence":90,"reasoning":"user is sharing info"}');
-        }
         // Analyze text — prompt contains "Analyze the following text"
         if (req.userPrompt?.includes("Analyze the following text")) {
           return Promise.resolve('{"summary":"test note","strength":5}');
         }
-        // Personality response (SAVE_ONLY handler)
+        // Personality response (handler)
         return Promise.resolve("Ciekawe! Opowiedz mi więcej.");
       }),
+      completeWithTools: vi.fn().mockResolvedValue({ name: "SAVE_ONLY", arguments: {} }),
     };
     storage = makeMockStorage();
     brain = new Brain(llm, storage);
@@ -89,12 +86,8 @@ describe("Brain", () => {
   });
 
   it("process RESEARCH_BRAIN calls llm for answer", async () => {
-    (llm.complete as ReturnType<typeof vi.fn>).mockImplementation((req: LLMRequest) => {
-      if (req.userPrompt?.includes("AVAILABLE ACTIONS")) {
-        return Promise.resolve('{"action":"RESEARCH_BRAIN","confidence":92,"reasoning":"memory query"}');
-      }
-      return Promise.resolve("Nie mam jeszcze nic na ten temat.");
-    });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} });
+    (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValue("Nie mam jeszcze nic na ten temat.");
 
     const result = await brain.process("user-1", "co wiem o Pythonie");
     expect(result.action).toBe("RESEARCH_BRAIN");
@@ -111,10 +104,7 @@ describe("Brain", () => {
     ]);
 
     await brain.registerAction("CUSTOM_ACTION", "does something custom", handler);
-
-    (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      '{"action":"CUSTOM_ACTION","confidence":90,"reasoning":"matched"}'
-    );
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ name: "CUSTOM_ACTION", arguments: {} });
 
     const result = await brain.process("user-1", "do the custom thing");
     expect(result.action).toBe("CUSTOM_ACTION");
@@ -124,16 +114,12 @@ describe("Brain", () => {
   // ─── Unknown action ────────────────────────────────────────────────────────
 
   it("process returns error message for unknown action without handler", async () => {
-    // LLM returns an action name that exists in cache but has no handler
     (storage.getActions as ReturnType<typeof vi.fn>).mockResolvedValue([
       { name: "SAVE_ONLY", description: "save" },
       { name: "GHOST_ACTION", description: "ghost" },
     ]);
     await brain.loadActions();
-
-    (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      '{"action":"GHOST_ACTION","confidence":90,"reasoning":"ghost"}'
-    );
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ name: "GHOST_ACTION", arguments: {} });
 
     const result = await brain.process("user-1", "something");
     expect(result.action).toBe("GHOST_ACTION");
@@ -145,9 +131,8 @@ describe("Brain", () => {
 
   it("SAVE_ONLY returns fallback answer when LLM returns null", async () => {
     (llm.complete as ReturnType<typeof vi.fn>).mockImplementation((req: LLMRequest) => {
-      if (req.userPrompt?.includes("### ROLE")) return Promise.resolve('{"action":"SAVE_ONLY","confidence":90,"reasoning":"save"}');
       if (req.userPrompt?.includes("Analyze the following text")) return Promise.resolve('{"summary":"s","strength":5}');
-      return Promise.resolve(null); // SAVE_ONLY handler gets null
+      return Promise.resolve(null);
     });
     const result = await brain.process("user-1", "some fact");
     expect(result.answer).toBe("Zapisałem to.");
@@ -156,10 +141,8 @@ describe("Brain", () => {
   // ─── RESEARCH_BRAIN fallback answer ───────────────────────────────────────
 
   it("RESEARCH_BRAIN returns fallback answer when LLM returns null", async () => {
-    (llm.complete as ReturnType<typeof vi.fn>).mockImplementation((req: LLMRequest) => {
-      if (req.userPrompt?.includes("### ROLE")) return Promise.resolve('{"action":"RESEARCH_BRAIN","confidence":92,"reasoning":"recall"}');
-      return Promise.resolve(null);
-    });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} });
+    (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const result = await brain.process("user-1", "co wiem o pythonie?");
     expect(result.answer).toBe("Coś poszło nie tak z generowaniem odpowiedzi.");
   });
@@ -168,10 +151,9 @@ describe("Brain", () => {
 
   it("RESEARCH_BRAIN without context uses fallback prompt", async () => {
     (storage.findRelevantEntries as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-    (llm.complete as ReturnType<typeof vi.fn>).mockImplementation((req: LLMRequest) => {
-      if (req.userPrompt?.includes("### ROLE")) return Promise.resolve('{"action":"RESEARCH_BRAIN","confidence":92,"reasoning":"recall"}');
-      return Promise.resolve("I don't know yet");
-    });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} });
+    (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValue("I don't know yet");
+
     const result = await brain.process("user-1", "co wiem o kwantach?");
     expect(result.answer).toBe("I don't know yet");
     const calls = (llm.complete as ReturnType<typeof vi.fn>).mock.calls;
@@ -182,10 +164,8 @@ describe("Brain", () => {
   // ─── RESEARCH_BRAIN appends chat history ─────────────────────────────────
 
   it("RESEARCH_BRAIN also appends chat history", async () => {
-    (llm.complete as ReturnType<typeof vi.fn>).mockImplementation((req: LLMRequest) => {
-      if (req.userPrompt?.includes("### ROLE")) return Promise.resolve('{"action":"RESEARCH_BRAIN","confidence":92,"reasoning":"recall"}');
-      return Promise.resolve("odpowiedź");
-    });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} });
+    (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValue("odpowiedź");
     await brain.process("user-1", "co wiem?");
     expect(storage.appendChatMessage).toHaveBeenCalledWith("user-1", "user", expect.any(String), expect.any(Number));
     expect(storage.appendChatMessage).toHaveBeenCalledWith("user-1", "assistant", expect.any(String), expect.any(Number));
@@ -219,17 +199,14 @@ describe("Brain", () => {
       { role: "user", content: "prev message" },
     ]);
     await brain.registerAction("MY_ACTION", "my", handler);
-
-    (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      '{"action":"MY_ACTION","confidence":90,"reasoning":"matched"}'
-    );
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ name: "MY_ACTION", arguments: {} });
 
     await brain.process("user-42", "trigger it");
     expect(handler).toHaveBeenCalledWith(
       "user-42",
       "trigger it",
       expect.objectContaining({ synapticTree: expect.any(String), hasContext: expect.any(Boolean) }),
-      expect.any(Object), // llm
+      expect.any(Object),
       expect.arrayContaining([expect.objectContaining({ role: "user" })]),
     );
   });
@@ -343,12 +320,10 @@ describe("Brain", () => {
 
   // ─── process() with empty actionsCache ───────────────────────────────────
 
-  it("process falls back to SAVE_ONLY when actionsCache is empty", async () => {
+  it("process throws when actionsCache is empty", async () => {
     const freshBrain = new Brain(llm, storage);
-    // no use() called — actionsCache empty → classifyIntent returns default fallback
-    const result = await freshBrain.process("user-1", "save this fact");
-    // handler not registered so answer is error message, but action should be SAVE_ONLY (default fallback)
-    expect(result.action).toBe("SAVE_ONLY");
+    // no use() called — actionsCache empty → tool calling returns invalid action
+    await expect(freshBrain.process("user-1", "save this fact")).rejects.toThrow();
   });
 
   it("process fetches chat history from storage (passed to action handler)", async () => {
@@ -367,10 +342,10 @@ describe("Brain", () => {
 // ─── Native Tool Calling ──────────────────────────────────────────────────────
 
 describe("Brain — native tool calling", () => {
-  it("uses completeWithTools when adapter supports it", async () => {
+  it("routes via completeWithTools", async () => {
     const storage = makeMockStorage();
     const llm: ILLMAdapter = {
-      complete: vi.fn().mockResolvedValue('{"action":"SAVE_ONLY","confidence":90,"reasoning":"test"}'),
+      complete: vi.fn(),
       completeWithTools: vi.fn().mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} }),
     };
 
@@ -381,53 +356,35 @@ describe("Brain — native tool calling", () => {
     const result = await brain.process("user-1", "what do I know about cats?");
 
     expect(llm.completeWithTools).toHaveBeenCalled();
+    expect(llm.complete).not.toHaveBeenCalledWith(expect.objectContaining({ userPrompt: expect.stringContaining("### ROLE") }));
     expect(result.action).toBe("RESEARCH_BRAIN");
   });
 
-  it("falls back to classifyIntent when completeWithTools returns null", async () => {
+  it("throws when completeWithTools returns invalid action", async () => {
     const storage = makeMockStorage();
     const llm: ILLMAdapter = {
-      complete: vi.fn().mockResolvedValue('{"action":"SAVE_ONLY","confidence":90,"reasoning":"test"}'),
+      complete: vi.fn(),
+      completeWithTools: vi.fn().mockResolvedValue({ name: "UNKNOWN_ACTION", arguments: {} }),
+    };
+
+    const brain = new Brain(llm, storage);
+    await brain.use(new MemoryPlugin());
+    await brain.loadActions();
+
+    await expect(brain.process("user-1", "do something")).rejects.toThrow("invalid action");
+  });
+
+  it("throws when completeWithTools returns null", async () => {
+    const storage = makeMockStorage();
+    const llm: ILLMAdapter = {
+      complete: vi.fn(),
       completeWithTools: vi.fn().mockResolvedValue(null),
     };
 
     const brain = new Brain(llm, storage);
-    await brain.use(new SavingPlugin(), new MemoryPlugin());
+    await brain.use(new MemoryPlugin());
     await brain.loadActions();
 
-    const result = await brain.process("user-1", "remember this");
-
-    expect(result.action).toBe("SAVE_ONLY");
-  });
-
-  it("falls back to classifyIntent when completeWithTools throws", async () => {
-    const storage = makeMockStorage();
-    const llm: ILLMAdapter = {
-      complete: vi.fn().mockResolvedValue('{"action":"SAVE_ONLY","confidence":90,"reasoning":"test"}'),
-      completeWithTools: vi.fn().mockRejectedValue(new Error("tool calling not supported")),
-    };
-
-    const brain = new Brain(llm, storage);
-    await brain.use(new SavingPlugin(), new MemoryPlugin());
-    await brain.loadActions();
-
-    const result = await brain.process("user-1", "remember this");
-
-    expect(result.action).toBe("SAVE_ONLY");
-  });
-
-  it("skips completeWithTools when adapter does not implement it", async () => {
-    const storage = makeMockStorage();
-    const llm: ILLMAdapter = {
-      complete: vi.fn().mockResolvedValue('{"action":"SAVE_ONLY","confidence":90,"reasoning":"test"}'),
-    };
-
-    const brain = new Brain(llm, storage);
-    await brain.use(new SavingPlugin(), new MemoryPlugin());
-    await brain.loadActions();
-
-    const result = await brain.process("user-1", "remember this");
-
-    expect(result.action).toBe("SAVE_ONLY");
+    await expect(brain.process("user-1", "do something")).rejects.toThrow("invalid action");
   });
 });
