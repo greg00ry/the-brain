@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'core-v*'
+      - 'adapter-sqlite-v*'
+      - 'adapter-mongo-v*'
+      - 'cli-v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '')
+            // core-v0.2.22 → "@the-brain/core v0.2.22"
+            const match = tag.match(/^(.+)-v(.+)$/)
+            const pkg = match[1]
+            const version = match[2]
+            const name = `@the-brain/${pkg} v${version}`
+
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name,
+              generate_release_notes: true,
+              draft: false,
+              prerelease: false,
+            })
