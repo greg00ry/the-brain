@@ -6,7 +6,8 @@ LLM-agnostic cognitive memory framework with biologically-inspired decay, synaps
 
 - **Memory that forgets** — entries decay over time, strong ones get consolidated to long-term memory
 - **Synaptic connections** — weighted links between related entries, traversed like a graph
-- **Hybrid intent routing** — AI classification with rule-based fallback (works with local or cloud LLMs)
+- **Native tool calling** — intent routing via OpenAI-compatible `tools` API (no JSON parsing hacks)
+- **ReAct agentic loop** — `brain.run()` with Reason→Act→Observe, multi-step execution
 - **User profile adaptation** — Brain learns your communication style and adapts responses
 - **PDF ingest** — feed documents as permanent memory (`isPermanent=true`, never decays)
 
@@ -27,19 +28,23 @@ import { SQLiteStorageAdapter } from "@the-brain/adapter-sqlite";
 
 const brain = new Brain(
   new OpenAICompatibleAdapter(
-    "http://localhost:11434/v1/chat/completions", // any OpenAI-compatible endpoint
-    "llama3.2"
+    "http://localhost:11434/v1/chat/completions",
+    "qwen2.5:7b"  // local, supports tool calling
   ),
   new SQLiteStorageAdapter("./.brain")
 );
 
-await brain.loadActions();
+await brain.use(new SavingPlugin(), new MemoryPlugin());
 
 // Save a fact
 await brain.save("user-1", "I prefer TypeScript over JavaScript");
 
-// Ask a question — Brain routes intent and searches memory
+// Route intent via native tool calling + execute handler
 const result = await brain.process("user-1", "What do I prefer for coding?");
+console.log(result.answer);
+
+// Multi-step ReAct loop (Reason → Act → Observe)
+const result = await brain.run("user-1", "What do I know about TypeScript?");
 console.log(result.answer);
 
 // Direct memory recall
@@ -47,11 +52,29 @@ const context = await brain.recall("user-1", "TypeScript preferences");
 console.log(context.synapticTree);
 ```
 
+## Local LLM requirement: tool calling support
+
+Brain routes intent using the OpenAI `tools` API — the model **must** support tool calling.
+
+| Model | Size | Tool calling | Notes |
+|---|---|---|---|
+| `qwen2.5:7b` | 4.4 GB | ✅ | Recommended local default |
+| `qwen2.5:3b` | 1.9 GB | ✅ | Lighter option |
+| `llama3.1:8b` | 4.7 GB | ✅ | Meta, solid alternative |
+| `mistral:7b` | 4.1 GB | ✅ | Fast, reliable |
+| `llama3.2:3b` | 2.0 GB | ❌ | No tool calling support |
+| `llama3:8b` | 4.7 GB | ❌ | No tool calling support |
+
+```bash
+# Recommended local setup:
+ollama pull qwen2.5:7b
+```
+
 ## Works with any LLM
 
 ```typescript
-// Local (Ollama, LM Studio)
-new OpenAICompatibleAdapter("http://localhost:11434/v1/chat/completions", "llama3.2")
+// Local (Ollama) — tool calling supported
+new OpenAICompatibleAdapter("http://localhost:11434/v1/chat/completions", "qwen2.5:7b")
 
 // Groq (free, fast)
 new OpenAICompatibleAdapter(
@@ -81,9 +104,18 @@ await brain.registerAction(
 );
 ```
 
-## Config overrides
+## process() vs run()
 
-Override any default constant per Brain instance:
+```typescript
+// process() — single-shot: classify intent → execute handler → return
+const result = await brain.process("user-1", "Save this note");
+
+// run() — ReAct loop: iterate Reason→Act→Observe up to N times
+// Use when actions may need multiple steps or tool chaining
+const result = await brain.run("user-1", "What did I save about trading?", 5);
+```
+
+## Config overrides
 
 ```typescript
 const brain = new Brain(llm, storage, embedding, {
@@ -96,6 +128,7 @@ const brain = new Brain(llm, storage, embedding, {
     synapseBranchFactor: 7,    // default: 5
     contextTopEntries: 8,      // default: 5
     decayWindowMs: 30 * 24 * 60 * 60 * 1000, // default: 7 days
+    synapseMode: "embedding",  // "llm" (default, richer) | "embedding" (faster)
   },
   chat: {
     historyMaxStored: 20,      // default: 10
