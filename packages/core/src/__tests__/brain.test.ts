@@ -60,7 +60,7 @@ describe("Brain", () => {
         // Personality response (handler)
         return Promise.resolve("Ciekawe! Opowiedz mi więcej.");
       }),
-      completeWithTools: vi.fn().mockResolvedValue({ name: "SAVE_ONLY", arguments: {} }),
+      completeWithTools: vi.fn().mockResolvedValue({ toolCall: { id: "call_1", name: "SAVE_ONLY", arguments: {} } }),
     };
     storage = makeMockStorage();
     brain = new Brain(llm, storage);
@@ -86,7 +86,7 @@ describe("Brain", () => {
   });
 
   it("process RESEARCH_BRAIN calls llm for answer", async () => {
-    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ toolCall: { id: "call_1", name: "RESEARCH_BRAIN", arguments: {} } });
     (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValue("Nie mam jeszcze nic na ten temat.");
 
     const result = await brain.process("user-1", "co wiem o Pythonie");
@@ -104,7 +104,7 @@ describe("Brain", () => {
     ]);
 
     await brain.registerAction("CUSTOM_ACTION", "does something custom", handler);
-    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ name: "CUSTOM_ACTION", arguments: {} });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ toolCall: { id: "call_1", name: "CUSTOM_ACTION", arguments: {} } });
 
     const result = await brain.process("user-1", "do the custom thing");
     expect(result.action).toBe("CUSTOM_ACTION");
@@ -119,7 +119,7 @@ describe("Brain", () => {
       { name: "GHOST_ACTION", description: "ghost" },
     ]);
     await brain.loadActions();
-    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ name: "GHOST_ACTION", arguments: {} });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ toolCall: { id: "call_1", name: "GHOST_ACTION", arguments: {} } });
 
     const result = await brain.process("user-1", "something");
     expect(result.action).toBe("GHOST_ACTION");
@@ -141,7 +141,7 @@ describe("Brain", () => {
   // ─── RESEARCH_BRAIN fallback answer ───────────────────────────────────────
 
   it("RESEARCH_BRAIN returns fallback answer when LLM returns null", async () => {
-    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ toolCall: { id: "call_1", name: "RESEARCH_BRAIN", arguments: {} } });
     (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const result = await brain.process("user-1", "co wiem o pythonie?");
     expect(result.answer).toBe("Coś poszło nie tak z generowaniem odpowiedzi.");
@@ -151,7 +151,7 @@ describe("Brain", () => {
 
   it("RESEARCH_BRAIN without context uses fallback prompt", async () => {
     (storage.findRelevantEntries as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ toolCall: { id: "call_1", name: "RESEARCH_BRAIN", arguments: {} } });
     (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValue("I don't know yet");
 
     const result = await brain.process("user-1", "co wiem o kwantach?");
@@ -164,7 +164,7 @@ describe("Brain", () => {
   // ─── RESEARCH_BRAIN appends chat history ─────────────────────────────────
 
   it("RESEARCH_BRAIN also appends chat history", async () => {
-    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValue({ toolCall: { id: "call_1", name: "RESEARCH_BRAIN", arguments: {} } });
     (llm.complete as ReturnType<typeof vi.fn>).mockResolvedValue("odpowiedź");
     await brain.process("user-1", "co wiem?");
     expect(storage.appendChatMessage).toHaveBeenCalledWith("user-1", "user", expect.any(String), expect.any(Number));
@@ -199,7 +199,7 @@ describe("Brain", () => {
       { role: "user", content: "prev message" },
     ]);
     await brain.registerAction("MY_ACTION", "my", handler);
-    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ name: "MY_ACTION", arguments: {} });
+    (llm.completeWithTools as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ toolCall: { id: "call_1", name: "MY_ACTION", arguments: {} } });
 
     await brain.process("user-42", "trigger it");
     expect(handler).toHaveBeenCalledWith(
@@ -346,7 +346,7 @@ describe("Brain — native tool calling", () => {
     const storage = makeMockStorage();
     const llm: ILLMAdapter = {
       complete: vi.fn(),
-      completeWithTools: vi.fn().mockResolvedValue({ name: "RESEARCH_BRAIN", arguments: {} }),
+      completeWithTools: vi.fn().mockResolvedValue({ toolCall: { id: "call_1", name: "RESEARCH_BRAIN", arguments: {} } }),
     };
 
     const brain = new Brain(llm, storage);
@@ -364,7 +364,7 @@ describe("Brain — native tool calling", () => {
     const storage = makeMockStorage();
     const llm: ILLMAdapter = {
       complete: vi.fn(),
-      completeWithTools: vi.fn().mockResolvedValue({ name: "UNKNOWN_ACTION", arguments: {} }),
+      completeWithTools: vi.fn().mockResolvedValue({ toolCall: { id: "call_1", name: "UNKNOWN_ACTION", arguments: {} } }),
     };
 
     const brain = new Brain(llm, storage);

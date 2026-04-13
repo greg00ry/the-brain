@@ -18,19 +18,31 @@ export interface LLMTool {
 }
 
 export interface LLMToolCall {
+  id: string;
   name: string;
   arguments: Record<string, unknown>;
+}
+
+export interface LLMMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content?: string;
+  tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
+  tool_call_id?: string;
+}
+
+export interface LLMToolResponse {
+  toolCall?: LLMToolCall;
+  text?: string;
 }
 
 /**
  * Adapter interface for any LLM backend.
  * Returns the raw text content from the model, or null on failure.
- * Callers use cleanAndParseJSON() if they need structured output.
  *
- * completeWithTools() is optional — implement it to enable native tool calling.
- * When absent, Brain falls back to classifyIntent() prompt-based routing.
+ * completeWithTools() accepts a full message array (for ReAct loop support)
+ * and returns either a tool call or a final text response.
  */
 export interface ILLMAdapter {
   complete(request: LLMRequest): Promise<string | null>;
-  completeWithTools?(request: LLMRequest, tools: LLMTool[]): Promise<LLMToolCall | null>;
+  completeWithTools?(messages: LLMMessage[], tools: LLMTool[], systemPrompt?: string): Promise<LLMToolResponse | null>;
 }

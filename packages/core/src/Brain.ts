@@ -1,4 +1,4 @@
-import { ILLMAdapter, LLMTool } from "./adapters/ILLMAdapter.js";
+import { ILLMAdapter, LLMTool, LLMMessage } from "./adapters/ILLMAdapter.js";
 import { IVaultEntry } from "./types/brain.js";
 import { IStorageAdapter, ActionInfo } from "./adapters/IStorageAdapter.js";
 import { IEmbeddingAdapter } from "./adapters/IEmbeddingAdapter.js";
@@ -134,22 +134,85 @@ export class Brain {
 
   // ─── Tool Calling ─────────────────────────────────────────────────────────
 
-  private async _classifyWithTools(text: string, actions: ActionInfo[]): Promise<{ action: string }> {
-    const tools: LLMTool[] = actions.map(a => ({
-      type: "function",
-      function: { name: a.name, description: a.description },
-    }));
+  private _buildTools(actions: ActionInfo[]): LLMTool[] {
+    return actions.map(a => ({ type: "function", function: { name: a.name, description: a.description } }));
+  }
 
-    const toolCall = await this.llm.completeWithTools!(
-      { userPrompt: text, temperature: 0, maxTokens: 50 },
+  private async _classifyWithTools(text: string, actions: ActionInfo[]): Promise<{ action: string }> {
+    const tools = this._buildTools(actions);
+    const response = await this.llm.completeWithTools!(
+      [{ role: "user", content: text }],
       tools,
     );
 
+    const toolCall = response?.toolCall;
     if (!toolCall || !actions.some(a => a.name === toolCall.name)) {
       throw new Error(`[Brain] Tool calling returned invalid action: ${toolCall?.name}`);
     }
 
     return { action: toolCall.name };
+  }
+
+  // ─── ReAct loop ───────────────────────────────────────────────────────────
+
+  async run(userId: string, text: string, maxIterations = 5): Promise<ProcessResult> {
+    const actions = this.actionsCache;
+    const tools = this._buildTools(actions);
+    const chatHistory = await this.storage.getChatHistory(userId);
+
+    const messages: LLMMessage[] = [
+      ...chatHistory.slice(-6).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+      { role: "user", content: text },
+    ];
+
+    let lastAnswer = "";
+    let lastAction = actions[0]?.name ?? "UNKNOWN";
+
+    for (let i = 0; i < maxIterations; i++) {
+      const response = await this.llm.completeWithTools!(messages, tools);
+
+      if (!response) break;
+
+      if (response.text) {
+        lastAnswer = response.text;
+        break;
+      }
+
+      if (response.toolCall) {
+        const { id, name, arguments: args } = response.toolCall;
+        lastAction = name;
+
+        // Append assistant tool call to message thread
+        messages.push({
+          role: "assistant",
+          tool_calls: [{ id, type: "function", function: { name, arguments: JSON.stringify(args) } }],
+        });
+
+        // Execute handler
+        const handler = this.handlers.get(name);
+        let toolResult: string;
+
+        if (handler) {
+          const context = await getBrainContext(userId, text, this.storage, this.embedding, this.cfg.memory);
+          if (name === "SAVE_ONLY") {
+            await proccessAndStore(userId, text, this.llm, this.storage, this.embedding);
+          }
+          toolResult = await handler(userId, text, context, this.llm, chatHistory);
+        } else {
+          toolResult = `Unknown action: ${name}`;
+        }
+
+        lastAnswer = toolResult;
+
+        // Feed tool result back to LLM
+        messages.push({ role: "tool", tool_call_id: id, content: toolResult });
+      }
+    }
+
+    await this.storage.appendChatMessage(userId, "user", text, this.cfg.chat.historyMaxStored);
+    await this.storage.appendChatMessage(userId, "assistant", lastAnswer, this.cfg.chat.historyMaxStored);
+
+    return { action: lastAction, answer: lastAnswer };
   }
 
   // ─── Process ──────────────────────────────────────────────────────────────

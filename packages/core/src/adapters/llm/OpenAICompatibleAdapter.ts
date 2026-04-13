@@ -1,4 +1,4 @@
-import { ILLMAdapter, LLMRequest, LLMTool, LLMToolCall } from "../ILLMAdapter.js";
+import { ILLMAdapter, LLMRequest, LLMTool, LLMMessage, LLMToolResponse } from "../ILLMAdapter.js";
 import { LLM } from "../../config/constants.js";
 
 // Works with any OpenAI-compatible API: LM Studio, Ollama, OpenAI, etc.
@@ -46,23 +46,34 @@ export class OpenAICompatibleAdapter implements ILLMAdapter {
     return data?.choices?.[0]?.message?.content ?? null;
   }
 
-  async completeWithTools(request: LLMRequest, tools: LLMTool[]): Promise<LLMToolCall | null> {
+  async completeWithTools(messages: LLMMessage[], tools: LLMTool[], systemPrompt?: string): Promise<LLMToolResponse | null> {
+    const fullMessages = [
+      ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
+      ...messages,
+    ];
+
     const data = await this.post({
       model: this.model,
-      messages: this.buildMessages(request),
+      messages: fullMessages,
       tools,
-      tool_choice: "required",
+      tool_choice: "auto",
       temperature: 0,
-      max_tokens: 100,
-    }) as { choices?: { message?: { tool_calls?: { function: { name: string; arguments: string } }[] } }[] } | null;
+      max_tokens: 500,
+    }) as { choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[] } | null;
 
-    const tc = data?.choices?.[0]?.message?.tool_calls?.[0];
-    if (!tc) return null;
+    const message = data?.choices?.[0]?.message;
+    if (!message) return null;
 
-    try {
-      return { name: tc.function.name, arguments: JSON.parse(tc.function.arguments || "{}") };
-    } catch {
-      return { name: tc.function.name, arguments: {} };
+    const tc = message.tool_calls?.[0];
+    if (tc) {
+      try {
+        return { toolCall: { id: tc.id, name: tc.function.name, arguments: JSON.parse(tc.function.arguments || "{}") } };
+      } catch {
+        return { toolCall: { id: tc.id, name: tc.function.name, arguments: {} } };
+      }
     }
+
+    if (message.content) return { text: message.content };
+    return null;
   }
 }
